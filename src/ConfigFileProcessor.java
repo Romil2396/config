@@ -34,7 +34,13 @@ public class ConfigFileProcessor {
 
             String line;
             while ((line = reader.readLine()) != null) {
-                System.out.println("Processing line: " + line); // Debugging statement
+                System.out.println("Read line: " + line); // Enhanced debugging statement
+
+                if (line.trim().isEmpty()) {
+                    System.out.println("Skipping empty line.");
+                    continue; // Skip empty lines
+                }
+
                 if (line.trim().startsWith("//") || line.trim().startsWith("#")) {
                     System.out.println("Skipping commented line."); // Debugging statement
                     continue; // Skip commented lines
@@ -51,10 +57,12 @@ public class ConfigFileProcessor {
                         System.out.println("Processed as JSON: " + jsonStr); // Debugging confirmation
                         handled = true;
                     }
-                } catch (JsonSyntaxException ignored) {}
+                } catch (JsonSyntaxException e) {
+                    System.out.println("Failed to parse JSON: " + e.getMessage()); // Log the error
+                }
 
+                // Check for key-value pairs
                 if (!handled) {
-                    // Check for key-value pairs
                     Matcher matcher = KEY_VALUE_PATTERN.matcher(line);
                     if (matcher.matches()) {
                         JsonObject jsonObject = new JsonObject();
@@ -66,8 +74,8 @@ public class ConfigFileProcessor {
                     }
                 }
 
+                // If no processing was successful, keep the line as original
                 if (!handled) {
-                    // Keep original if no processing was successful
                     untouchedOutput.append(line).append("\n");
                     System.out.println("Keeping original line as is."); // Debugging statement
                 }
