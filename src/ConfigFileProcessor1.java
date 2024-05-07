@@ -1,6 +1,9 @@
-import com.google.gson.*;
-import groovy.lang.GroovyShell;
-import org.codehaus.groovy.control.CompilerConfiguration;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
 
 import java.io.*;
 import java.nio.file.*;
@@ -15,9 +18,6 @@ public class ConfigFileProcessor1 {
 
     public static void processConfigFile() throws IOException {
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
-        CompilerConfiguration config = new CompilerConfiguration();
-        GroovyShell groovyShell = new GroovyShell(config);
-
         StringBuilder jsonOutput = new StringBuilder("// JSON //\n");
         StringBuilder keyValueOutput = new StringBuilder("// KEY PAIR //\n");
         StringBuilder untouchedOutput = new StringBuilder("// UNTOUCHED //\n");
@@ -55,9 +55,15 @@ public class ConfigFileProcessor1 {
                     }
                 }
 
-                // If no processing was successful, keep the line as original
+                // If no processing was successful, attempt to parse as ACH
                 if (!handled) {
-                    untouchedOutput.append(line).append("\n");
+                    JsonObject achRecord = tryParseACHRecord(line);
+                    if (achRecord != null) {
+                        untouchedOutput.append(gson.toJson(achRecord)).append("\n");
+                        handled = true;
+                    } else {
+                        untouchedOutput.append(line).append("\n"); // Keep as truly untouched
+                    }
                 }
             }
 
@@ -68,7 +74,19 @@ public class ConfigFileProcessor1 {
         }
     }
 
-    // Attempt to correct common JSON formatting issues
+    private static JsonObject tryParseACHRecord(String line) {
+        // Simple ACH record parsing logic based on assumed ACH format
+        // This example assumes ACH lines start with specific characters; adjust logic based on actual format
+        if (line.length() > 1 && Character.isDigit(line.charAt(0))) {
+            JsonObject json = new JsonObject();
+            json.addProperty("RecordType", "ACH Record");
+            json.addProperty("Content", line);
+            return json;
+        }
+        return null;
+    }
+
+    // Correct common JSON formatting issues
     private static String correctMalformedJson(String json) {
         if (!json.trim().startsWith("{") && !json.trim().startsWith("[")) {
             json = "{" + json + "}";
