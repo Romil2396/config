@@ -24,10 +24,7 @@ public class ConfigFileProcessor2 {
 
             String line;
             while ((line = reader.readLine()) != null) {
-                if (line.trim().isEmpty() || line.trim().startsWith("//") || line.trim().startsWith("#")) {
-                    untouchedOutput.append(line).append("\n");
-                    continue;
-                }
+                System.out.println("Processing line: " + line); // Debug output
 
                 boolean handled = false;
 
@@ -38,12 +35,15 @@ public class ConfigFileProcessor2 {
                         jsonOutput.append(gson.toJson(jsonElement)).append("\n");
                         handled = true;
                     }
-                } catch (JsonSyntaxException ignored) {}
+                } catch (JsonSyntaxException e) {
+                    System.out.println("Failed to parse JSON: " + e.getMessage()); // Debug output
+                }
 
                 // Check for key-value pairs
                 if (!handled) {
                     Matcher matcher = KEY_VALUE_PATTERN.matcher(line);
                     if (matcher.matches()) {
+                        System.out.println("Matched Key-Value pair"); // Debug output
                         JsonObject jsonObject = new JsonObject();
                         jsonObject.addProperty(matcher.group(1), matcher.group(2));
                         keyValueOutput.append(gson.toJson(jsonObject)).append("\n");
@@ -52,9 +52,10 @@ public class ConfigFileProcessor2 {
                 }
 
                 // Attempt to parse as ACH record
-                if (!handled) {
+                if (!handled && (line.startsWith("ACH") || Character.isDigit(line.charAt(0)))) {
                     JsonObject achRecord = ACHRecordParser.parseACHRecord(line);
                     if (achRecord != null) {
+                        System.out.println("Matched ACH record"); // Debug output
                         achOutput.append(gson.toJson(achRecord)).append("\n");
                         handled = true;
                     }
