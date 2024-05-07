@@ -24,17 +24,23 @@ public class ConfigFileProcessor {
         config.setScriptBaseClass("groovy.transform.BaseScript");
         GroovyShell groovyShell = new GroovyShell(config);
 
+        StringBuilder jsonOutput = new StringBuilder();
+        StringBuilder groovyOutput = new StringBuilder();
+
         try (BufferedReader reader = Files.newBufferedReader(INPUT_FILE_PATH);
              BufferedWriter writer = Files.newBufferedWriter(OUTPUT_FILE_PATH, StandardOpenOption.CREATE)) {
 
             String line;
             while ((line = reader.readLine()) != null) {
+                if (line.trim().startsWith("//") || line.trim().startsWith("#")) {
+                    continue; // Skip commented lines
+                }
+
                 // Attempt to parse as JSON first
                 try {
                     JsonElement jsonElement = JsonParser.parseString(line);
                     if (jsonElement.isJsonObject() || jsonElement.isJsonArray()) {
-                        writer.write(gson.toJson(jsonElement));
-                        writer.newLine();
+                        jsonOutput.append(gson.toJson(jsonElement)).append("\n");
                         continue;
                     }
                 } catch (JsonSyntaxException ignored) {
@@ -43,8 +49,7 @@ public class ConfigFileProcessor {
                     if (matcher.matches()) {
                         JsonObject jsonObject = new JsonObject();
                         jsonObject.addProperty(matcher.group(1).trim(), matcher.group(2).replace("\"", ""));
-                        writer.write(gson.toJson(jsonObject));
-                        writer.newLine();
+                        jsonOutput.append(gson.toJson(jsonObject)).append("\n");
                         continue;
                     }
                 }
@@ -52,13 +57,15 @@ public class ConfigFileProcessor {
                 // Process as Groovy code for AST generation
                 try {
                     Object result = groovyShell.evaluate("{ -> " + line + " }"); // Wrap in closure for safer evaluation
-                    writer.write("Groovy AST: " + result.getClass().getSimpleName() + " -> " + result);
-                    writer.newLine();
+                    groovyOutput.append("Groovy AST: ").append(result.getClass().getSimpleName()).append(" -> ").append(result).append("\n");
                 } catch (Exception e) {
-                    writer.write("Error processing line as Groovy code: " + line + " | Error: " + e.getMessage());
-                    writer.newLine();
+                    groovyOutput.append("Error processing line as Groovy code: ").append(line).append(" | Error: ").append(e.getMessage()).append("\n");
                 }
             }
+
+            // Write JSON outputs first, then AST outputs
+            writer.write(jsonOutput.toString());
+            writer.write(groovyOutput.toString());
         }
     }
 
