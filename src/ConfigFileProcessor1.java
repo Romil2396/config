@@ -16,6 +16,7 @@ public class ConfigFileProcessor1 {
 
         StringBuilder jsonOutput = new StringBuilder("// JSON //\n");
         StringBuilder keyValueOutput = new StringBuilder("// KEY PAIR //\n");
+        StringBuilder achOutput = new StringBuilder("// ACH //\n"); // To handle ACH records
         StringBuilder untouchedOutput = new StringBuilder("// UNTOUCHED //\n");
 
         try (BufferedReader reader = Files.newBufferedReader(INPUT_FILE_PATH);
@@ -39,7 +40,7 @@ public class ConfigFileProcessor1 {
                 } catch (JsonSyntaxException ignored) {}
 
                 // Check for key-value pairs
-                if (!handled) {
+                if (!handled && KEY_VALUE_PATTERN.matcher(line).matches()) {
                     Matcher matcher = KEY_VALUE_PATTERN.matcher(line);
                     if (matcher.matches()) {
                         JsonObject jsonObject = new JsonObject();
@@ -49,11 +50,12 @@ public class ConfigFileProcessor1 {
                     }
                 }
 
-                // Attempt to parse as ACH record
+                // Try parsing as ACH record
                 if (!handled) {
-                    JsonObject achRecord = tryParseACHRecord(line);
+                    String[] lines = line.split("\\r?\\n"); // Split multiline input into separate lines if needed
+                    JsonObject achRecord = ACHRecordParser.parseACHData(lines);
                     if (achRecord != null) {
-                        untouchedOutput.append(gson.toJson(achRecord)).append("\n");
+                        achOutput.append(gson.toJson(achRecord)).append("\n");
                         handled = true;
                     }
                 }
@@ -67,31 +69,18 @@ public class ConfigFileProcessor1 {
             // Write outputs with separators
             writer.write(jsonOutput.toString());
             writer.write(keyValueOutput.toString());
+            writer.write(achOutput.toString());
             writer.write(untouchedOutput.toString());
         }
     }
 
-    private static JsonObject tryParseACHRecord(String line) {
-        // Here you can add logic specific to parsing ACH records
-        // For now, this is a placeholder and should be adjusted based on actual ACH format
-        if (line.length() > 1 && Character.isDigit(line.charAt(0))) {
-            JsonObject json = new JsonObject();
-            json.addProperty("RecordType", "ACH Record");
-            json.addProperty("Content", line);
-            return json;
-        }
-        return null;
-    }
-
-    // Correct common JSON formatting issues
     private static String correctMalformedJson(String json) {
         if (!json.trim().startsWith("{") && !json.trim().startsWith("[")) {
             json = "{" + json + "}";
         }
-        return json.replaceAll("([^\\\"]\\s*:\\s*)([^\\\"\\{\\[]+)(\\s*[,\\}])", "$1\"$2\"$3"); // Attempt to add quotes around bare words
+        return json.replaceAll("([^\\\"]\\s*:\\s*)([^\\\"\\{\\[]+)(\\s*[,\\}])", "$1\"$2\"$3"); // Add quotes around bare words
     }
 
-    // Ensure values are properly formatted as JSON values
     private static String formatValue(String value) {
         if (!value.startsWith("\"")) {
             value = "\"" + value + "\"";
