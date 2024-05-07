@@ -1,4 +1,11 @@
-import com.google.gson.*;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
+import groovy.lang.GroovyShell;
+import org.codehaus.groovy.control.CompilerConfiguration;
 
 import java.io.*;
 import java.nio.file.*;
@@ -11,85 +18,103 @@ public class ConfigFileProcessor1 {
     private static final Path OUTPUT_FILE_PATH = Paths.get("path/to/your/output/result.txt");
     private static final Pattern KEY_VALUE_PATTERN = Pattern.compile("^\\s*([\\w\\s]+)\\s*:\\s*(\"[^\"]*\"|[^\\s]+)\\s*$");
 
-    public static void processFile() throws IOException {
+    public static void processConfigFile() throws IOException {
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
-        StringBuilder jsonOutput = new StringBuilder();
-        StringBuilder otherOutput = new StringBuilder();
+        CompilerConfiguration config = new CompilerConfiguration();
+        GroovyShell groovyShell = new GroovyShell(config);
+
+        StringBuilder jsonOutput = new StringBuilder("// JSON //\n");
+        StringBuilder keyValueOutput = new StringBuilder("// KEY PAIR //\n");
+        StringBuilder untouchedOutput = new StringBuilder("// UNTOUCHED //\n");
+        StringBuilder nachaOutput = new StringBuilder("// NACHA //\n");  // To hold NACHA records as JSON
 
         try (BufferedReader reader = Files.newBufferedReader(INPUT_FILE_PATH);
              BufferedWriter writer = Files.newBufferedWriter(OUTPUT_FILE_PATH, StandardOpenOption.CREATE)) {
 
             String line;
             while ((line = reader.readLine()) != null) {
+                if (line.trim().isEmpty() || line.trim().startsWith("//") || line.trim().startsWith("#")) {
+                    continue; // Skip empty or commented lines
+                }
+
                 boolean handled = false;
 
-                // Try to parse as JSON first
-                if (tryParseJson(line, jsonOutput, gson)) {
-                    handled = true;
+                // Try to correct and parse as JSON
+                try {
+                    JsonElement jsonElement = JsonParser.parseString(correctMalformedJson(line));
+                    if (jsonElement.isJsonObject() || jsonElement.isJsonArray()) {
+                        jsonOutput.append(gson.toJson(jsonElement)).append("\n");
+                        handled = true;
+                    }
+                } catch (JsonSyntaxException ignored) {
+                    // Not JSON or still malformed after correction attempt
                 }
 
                 // Check for key-value pairs
-                if (!handled && tryParseKeyValue(line, jsonOutput, gson)) {
-                    handled = true;
-                }
-
-                // If no processing was successful, check if it's a NACHA record
-                if (!handled && tryParseNACHA(line, otherOutput)) {
-                    handled = true;
-                }
-
-                // If still not handled, it's truly untouched
                 if (!handled) {
-                    otherOutput.append(line).append("\n");
+                    Matcher matcher = KEY_VALUE_PATTERN.matcher(line);
+                    if (matcher.matches()) {
+                        JsonObject jsonObject = new JsonObject();
+                        jsonObject.addProperty(matcher.group(1).trim(), formatValue(matcher.group(2)));
+                        keyValueOutput.append(gson.toJson(jsonObject)).append("\n");
+                        handled = true;
+                    }
+                }
+
+                // Try parsing as NACHA record
+                if (!handled && line.length() > 1 && Character.isDigit(line.charAt(0))) {
+                    JsonObject nachaRecord = parseNachaRecord(line);
+                    if (nachaRecord != null) {
+                        nachaOutput.append(gson.toJson(nachaRecord)).append("\n");
+                        handled = true;
+                    }
+                }
+
+                // If no processing was successful, keep the line as original
+                if (!handled) {
+                    untouchedOutput.append(line).append("\n");
                 }
             }
 
-            // Write JSON outputs first, then other outputs
-            writer.write("// JSON Output //\n");
+            // Write outputs with separators
             writer.write(jsonOutput.toString());
-            writer.write("// Other Output //\n");
-            writer.write(otherOutput.toString());
+            writer.write(keyValueOutput.toString());
+            writer.write(nachaOutput.toString());
+            writer.write(untouchedOutput.toString());
         }
     }
 
-    private static boolean tryParseJson(String line, StringBuilder output, Gson gson) {
-        try {
-            JsonElement jsonElement = JsonParser.parseString(line);
-            if (jsonElement.isJsonObject() || jsonElement.isJsonArray()) {
-                output.append(gson.toJson(jsonElement)).append("\n");
-                return true;
-            }
-        } catch (JsonSyntaxException ignored) {}
-        return false;
+    private static JsonObject parseNachaRecord(String line) {
+        JsonObject json = new JsonObject();
+        // Assuming the first character is the record type which determines the type of NACHA record
+        char type = line.charAt(0);
+        json.addProperty("RecordType", String.valueOf(type));
+        json.addProperty("Content", line); // Add further parsing based on NACHA specs
+        return json;
     }
 
-    private static boolean tryParseKeyValue(String line, StringBuilder output, Gson gson) {
-        Matcher matcher = KEY_VALUE_PATTERN.matcher(line);
-        if (matcher.matches()) {
-            JsonObject jsonObject = new JsonObject();
-            jsonObject.addProperty(matcher.group(1).trim(), matcher.group(2).replace("\"", ""));
-            output.append(gson.toJson(jsonObject)).append("\n");
-            return true;
+    // Attempt to correct common JSON formatting issues
+    private static String correctMalformedJson(String json) {
+        if (!json.trim().startsWith("{") && !json.trim().startsWith("[")) {
+            json = "{" + json + "}";
         }
-        return false;
+        return json.replaceAll("([^\\\"]\\s*:\\s*)([^\\\"\\{\\[]+)(\\s*[,\\}])", "$1\"$2\"$3"); // Attempt to add quotes around bare words
     }
 
-    private static boolean tryParseNACHA(String line, StringBuilder output) {
-        // Here you can add logic specific to parsing NACHA records
-        // For now, we simulate a check for NACHA record types based on expected starting characters
-        if (line.length() > 1 && Character.isDigit(line.charAt(0))) {
-            output.append("NACHA Record: ").append(line).append("\n");
-            return true;
+    // Ensure values are properly formatted as JSON values
+    private static String formatValue(String value) {
+        if (!value.startsWith("\"")) {
+            value = "\"" + value + "\"";
         }
-        return false;
+        return value;
     }
 
     public static void main(String[] args) {
         try {
-            processFile();
+            processConfigFile();
             System.out.println("Processing completed. Output written to " + OUTPUT_FILE_PATH);
         } catch (IOException e) {
-            System.err.println("Failed to process the file: " + e.getMessage());
+            System.err.println("Failed to process the config file: " + e.getMessage());
         }
     }
 }
