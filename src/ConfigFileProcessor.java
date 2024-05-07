@@ -26,46 +26,70 @@ public class ConfigFileProcessor {
 
         StringBuilder jsonOutput = new StringBuilder();
         StringBuilder groovyOutput = new StringBuilder();
+        StringBuilder originalOutput = new StringBuilder(); // For lines that don't match any criteria
 
         try (BufferedReader reader = Files.newBufferedReader(INPUT_FILE_PATH);
              BufferedWriter writer = Files.newBufferedWriter(OUTPUT_FILE_PATH, StandardOpenOption.CREATE)) {
 
             String line;
             while ((line = reader.readLine()) != null) {
+                System.out.println("Processing line: " + line); // Debugging statement
                 if (line.trim().startsWith("//") || line.trim().startsWith("#")) {
+                    System.out.println("Skipping commented line."); // Debugging statement
                     continue; // Skip commented lines
                 }
+
+                boolean handled = false;
 
                 // Attempt to parse as JSON first
                 try {
                     JsonElement jsonElement = JsonParser.parseString(line);
                     if (jsonElement.isJsonObject() || jsonElement.isJsonArray()) {
-                        jsonOutput.append(gson.toJson(jsonElement)).append("\n");
-                        continue;
+                        String jsonStr = gson.toJson(jsonElement);
+                        jsonOutput.append(jsonStr).append("\n");
+                        System.out.println("Processed as JSON: " + jsonStr); // Debugging confirmation
+                        handled = true;
                     }
-                } catch (JsonSyntaxException ignored) {
-                    // Not a JSON line, check for key-value pairs
+                } catch (JsonSyntaxException ignored) {}
+
+                if (!handled) {
+                    // Check for key-value pairs
                     Matcher matcher = KEY_VALUE_PATTERN.matcher(line);
                     if (matcher.matches()) {
                         JsonObject jsonObject = new JsonObject();
                         jsonObject.addProperty(matcher.group(1).trim(), matcher.group(2).replace("\"", ""));
-                        jsonOutput.append(gson.toJson(jsonObject)).append("\n");
-                        continue;
+                        String jsonStr = gson.toJson(jsonObject);
+                        jsonOutput.append(jsonStr).append("\n");
+                        System.out.println("Processed as Key-Value to JSON: " + jsonStr); // Debugging confirmation
+                        handled = true;
                     }
                 }
 
-                // Process as Groovy code for AST generation
-                try {
-                    Object result = groovyShell.evaluate("{ -> " + line + " }"); // Wrap in closure for safer evaluation
-                    groovyOutput.append("Groovy AST: ").append(result.getClass().getSimpleName()).append(" -> ").append(result).append("\n");
-                } catch (Exception e) {
-                    groovyOutput.append("Error processing line as Groovy code: ").append(line).append(" | Error: ").append(e.getMessage()).append("\n");
+                if (!handled) {
+                    // Process as Groovy code for AST generation
+                    try {
+                        Object result = groovyShell.evaluate("{ -> " + line + " }"); // Wrap in closure for safer evaluation
+                        String resultStr = "Groovy AST: " + result.getClass().getSimpleName() + " -> " + result;
+                        groovyOutput.append(resultStr).append("\n");
+                        System.out.println("Processed as Groovy AST."); // Debugging statement
+                        handled = true;
+                    } catch (Exception e) {
+                        String errorMessage = "Error processing line as Groovy code: " + line + " | Error: " + e.getMessage();
+                        System.out.println(errorMessage); // Detailed error logging
+                    }
+                }
+
+                if (!handled) {
+                    // Keep original if no processing was successful
+                    originalOutput.append(line).append("\n");
+                    System.out.println("Keeping original line as is."); // Debugging statement
                 }
             }
 
-            // Write JSON outputs first, then AST outputs
+            // Write JSON outputs first, then AST outputs, and lastly the original lines
             writer.write(jsonOutput.toString());
             writer.write(groovyOutput.toString());
+            writer.write(originalOutput.toString());
         }
     }
 
