@@ -17,6 +17,7 @@ public class ConfigFileProcessor {
     private static final Path INPUT_FILE_PATH = Paths.get("path/to/your/input/config.txt");
     private static final Path OUTPUT_FILE_PATH = Paths.get("path/to/your/output/result.txt");
     private static final Pattern KEY_VALUE_PATTERN = Pattern.compile("^\\s*([\\w\\s]+)\\s*:\\s*(\"[^\"]*\"|[^\\s]+)\\s*$");
+    private static final String SECTION_SEPARATOR = "////////////////////////////////////////////////////////////////////////////////";
 
     public static void processConfigFile() throws IOException {
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -25,8 +26,8 @@ public class ConfigFileProcessor {
         GroovyShell groovyShell = new GroovyShell(config);
 
         StringBuilder jsonOutput = new StringBuilder();
-        StringBuilder groovyOutput = new StringBuilder();
-        StringBuilder originalOutput = new StringBuilder(); // For lines that don't match any criteria
+        StringBuilder keyValueOutput = new StringBuilder();
+        StringBuilder untouchedOutput = new StringBuilder();
 
         try (BufferedReader reader = Files.newBufferedReader(INPUT_FILE_PATH);
              BufferedWriter writer = Files.newBufferedWriter(OUTPUT_FILE_PATH, StandardOpenOption.CREATE)) {
@@ -59,37 +60,25 @@ public class ConfigFileProcessor {
                         JsonObject jsonObject = new JsonObject();
                         jsonObject.addProperty(matcher.group(1).trim(), matcher.group(2).replace("\"", ""));
                         String jsonStr = gson.toJson(jsonObject);
-                        jsonOutput.append(jsonStr).append("\n");
+                        keyValueOutput.append(jsonStr).append("\n");
                         System.out.println("Processed as Key-Value to JSON: " + jsonStr); // Debugging confirmation
                         handled = true;
                     }
                 }
 
                 if (!handled) {
-                    // Process as Groovy code for AST generation
-                    try {
-                        Object result = groovyShell.evaluate("{ -> " + line + " }"); // Wrap in closure for safer evaluation
-                        String resultStr = "Groovy AST: " + result.getClass().getSimpleName() + " -> " + result;
-                        groovyOutput.append(resultStr).append("\n");
-                        System.out.println("Processed as Groovy AST."); // Debugging statement
-                        handled = true;
-                    } catch (Exception e) {
-                        String errorMessage = "Error processing line as Groovy code: " + line + " | Error: " + e.getMessage();
-                        System.out.println(errorMessage); // Detailed error logging
-                    }
-                }
-
-                if (!handled) {
                     // Keep original if no processing was successful
-                    originalOutput.append(line).append("\n");
+                    untouchedOutput.append(line).append("\n");
                     System.out.println("Keeping original line as is."); // Debugging statement
                 }
             }
 
-            // Write JSON outputs first, then AST outputs, and lastly the original lines
+            // Write JSON outputs first, then key-value JSON, and lastly the untouched lines with separators
             writer.write(jsonOutput.toString());
-            writer.write(groovyOutput.toString());
-            writer.write(originalOutput.toString());
+            writer.write(SECTION_SEPARATOR + "\n");
+            writer.write(keyValueOutput.toString());
+            writer.write(SECTION_SEPARATOR + "\n");
+            writer.write(untouchedOutput.toString());
         }
     }
 
