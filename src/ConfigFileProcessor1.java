@@ -1,9 +1,4 @@
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.google.gson.JsonSyntaxException;
+import com.google.gson.*;
 
 import java.io.*;
 import java.nio.file.*;
@@ -18,6 +13,7 @@ public class ConfigFileProcessor1 {
 
     public static void processConfigFile() throws IOException {
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
+
         StringBuilder jsonOutput = new StringBuilder("// JSON //\n");
         StringBuilder keyValueOutput = new StringBuilder("// KEY PAIR //\n");
         StringBuilder untouchedOutput = new StringBuilder("// UNTOUCHED //\n");
@@ -40,9 +36,7 @@ public class ConfigFileProcessor1 {
                         jsonOutput.append(gson.toJson(jsonElement)).append("\n");
                         handled = true;
                     }
-                } catch (JsonSyntaxException ignored) {
-                    // Not JSON or still malformed after correction attempt
-                }
+                } catch (JsonSyntaxException ignored) {}
 
                 // Check for key-value pairs
                 if (!handled) {
@@ -55,15 +49,18 @@ public class ConfigFileProcessor1 {
                     }
                 }
 
-                // If no processing was successful, attempt to parse as ACH
+                // Attempt to parse as ACH record
                 if (!handled) {
                     JsonObject achRecord = tryParseACHRecord(line);
                     if (achRecord != null) {
                         untouchedOutput.append(gson.toJson(achRecord)).append("\n");
                         handled = true;
-                    } else {
-                        untouchedOutput.append(line).append("\n"); // Keep as truly untouched
                     }
+                }
+
+                // If no processing was successful, keep the line as original
+                if (!handled) {
+                    untouchedOutput.append(line).append("\n");
                 }
             }
 
@@ -75,8 +72,8 @@ public class ConfigFileProcessor1 {
     }
 
     private static JsonObject tryParseACHRecord(String line) {
-        // Simple ACH record parsing logic based on assumed ACH format
-        // This example assumes ACH lines start with specific characters; adjust logic based on actual format
+        // Here you can add logic specific to parsing ACH records
+        // For now, this is a placeholder and should be adjusted based on actual ACH format
         if (line.length() > 1 && Character.isDigit(line.charAt(0))) {
             JsonObject json = new JsonObject();
             json.addProperty("RecordType", "ACH Record");
