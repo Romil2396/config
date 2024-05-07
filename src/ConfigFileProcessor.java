@@ -1,6 +1,7 @@
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
 import groovy.lang.GroovyShell;
@@ -8,6 +9,8 @@ import org.codehaus.groovy.control.CompilerConfiguration;
 
 import java.io.*;
 import java.nio.file.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ConfigFileProcessor {
 
@@ -17,12 +20,14 @@ public class ConfigFileProcessor {
     public static void processConfigFile() throws IOException {
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
         GroovyShell groovyShell = new GroovyShell(new CompilerConfiguration());
+        Pattern keyValuePattern = Pattern.compile("^\\s*(\\w+)\\s*:\\s*(.*)$");
 
         try (BufferedReader reader = Files.newBufferedReader(INPUT_FILE_PATH);
              BufferedWriter writer = Files.newBufferedWriter(OUTPUT_FILE_PATH, StandardOpenOption.CREATE)) {
 
             String line;
             while ((line = reader.readLine()) != null) {
+                // Attempt to parse as JSON first
                 try {
                     JsonElement jsonElement = JsonParser.parseString(line);
                     if (jsonElement.isJsonObject() || jsonElement.isJsonArray()) {
@@ -31,16 +36,24 @@ public class ConfigFileProcessor {
                         continue;
                     }
                 } catch (JsonSyntaxException ignored) {
-                    // Not a JSON line
+                    // Not a JSON line, check for key-value pairs
+                    Matcher matcher = keyValuePattern.matcher(line);
+                    if (matcher.matches()) {
+                        JsonObject jsonObject = new JsonObject();
+                        jsonObject.addProperty(matcher.group(1), matcher.group(2));
+                        writer.write(gson.toJson(jsonObject));
+                        writer.newLine();
+                        continue;
+                    }
                 }
 
-                // Process as Groovy code
+                // Process as Groovy code for AST generation
                 try {
-                    Object result = groovyShell.evaluate(line);
-                    writer.write("Groovy AST: " + result);
+                    Object result = groovyShell.evaluate("{ -> " + line + " }"); // Wrap in closure for safer evaluation
+                    writer.write("Groovy AST: " + result.getClass().getSimpleName() + " -> " + result);
                     writer.newLine();
                 } catch (Exception e) {
-                    writer.write("Error processing Groovy line: " + e.getMessage());
+                    writer.write("Error processing line as Groovy code: " + e.getMessage());
                     writer.newLine();
                 }
             }
