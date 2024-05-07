@@ -1,9 +1,4 @@
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.google.gson.JsonSyntaxException;
+import com.google.gson.*;
 import groovy.lang.GroovyShell;
 import org.codehaus.groovy.control.CompilerConfiguration;
 
@@ -26,7 +21,6 @@ public class ConfigFileProcessor1 {
         StringBuilder jsonOutput = new StringBuilder("// JSON //\n");
         StringBuilder keyValueOutput = new StringBuilder("// KEY PAIR //\n");
         StringBuilder untouchedOutput = new StringBuilder("// UNTOUCHED //\n");
-        StringBuilder nachaOutput = new StringBuilder("// NACHA //\n");  // To hold NACHA records as JSON
 
         try (BufferedReader reader = Files.newBufferedReader(INPUT_FILE_PATH);
              BufferedWriter writer = Files.newBufferedWriter(OUTPUT_FILE_PATH, StandardOpenOption.CREATE)) {
@@ -61,15 +55,6 @@ public class ConfigFileProcessor1 {
                     }
                 }
 
-                // Try parsing as NACHA record
-                if (!handled && line.length() > 1 && Character.isDigit(line.charAt(0))) {
-                    JsonObject nachaRecord = parseNachaRecord(line);
-                    if (nachaRecord != null) {
-                        nachaOutput.append(gson.toJson(nachaRecord)).append("\n");
-                        handled = true;
-                    }
-                }
-
                 // If no processing was successful, keep the line as original
                 if (!handled) {
                     untouchedOutput.append(line).append("\n");
@@ -79,18 +64,8 @@ public class ConfigFileProcessor1 {
             // Write outputs with separators
             writer.write(jsonOutput.toString());
             writer.write(keyValueOutput.toString());
-            writer.write(nachaOutput.toString());
             writer.write(untouchedOutput.toString());
         }
-    }
-
-    private static JsonObject parseNachaRecord(String line) {
-        JsonObject json = new JsonObject();
-        // Assuming the first character is the record type which determines the type of NACHA record
-        char type = line.charAt(0);
-        json.addProperty("RecordType", String.valueOf(type));
-        json.addProperty("Content", line); // Add further parsing based on NACHA specs
-        return json;
     }
 
     // Attempt to correct common JSON formatting issues
