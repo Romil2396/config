@@ -1,49 +1,30 @@
 import com.google.gson.JsonObject;
-import java.util.ArrayDeque;
-import java.util.Deque;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class ACHRecordParser {
-    // Adjusted patterns based on expected input details
-    private static final Pattern BLOCK_OPEN = Pattern.compile("^(\\w+)\\s*\\{\\s*$");
-    private static final Pattern BLOCK_CLOSE = Pattern.compile("^\\}\\s*$");
-    private static final Pattern KEY_VALUE_PAIR = Pattern.compile("^(\\w+)\\s*:\\s*([^;]+);\\s*$");
 
-    public static JsonObject parseACHData(String[] lines) {
-        Deque<JsonObject> stack = new ArrayDeque<>();
-        JsonObject root = new JsonObject();
-        stack.push(root);
+    // Parses a single line of ACH data based on an assumed format
+    public static JsonObject parseACHRecord(String line) {
+        JsonObject json = new JsonObject();
+        char type = line.charAt(0);
 
-        for (String line : lines) {
-            line = line.trim();
-            if (line.isEmpty()) continue;
-
-            System.out.println("Processing line: " + line);  // Debug output
-
-            Matcher openMatcher = BLOCK_OPEN.matcher(line);
-            Matcher closeMatcher = BLOCK_CLOSE.matcher(line);
-            Matcher kvMatcher = KEY_VALUE_PAIR.matcher(line);
-
-            if (openMatcher.matches()) {
-                String blockName = openMatcher.group(1);
-                JsonObject newBlock = new JsonObject();
-                stack.peek().add(blockName, newBlock);
-                stack.push(newBlock);
-                System.out.println("Opened new block: " + blockName);  // Debugging block opening
-            } else if (closeMatcher.matches()) {
-                stack.pop();
-                System.out.println("Closed a block");  // Debugging block closing
-            } else if (kvMatcher.matches()) {
-                String key = kvMatcher.group(1);
-                String value = kvMatcher.group(2).trim();
-                stack.peek().addProperty(key, value);
-                System.out.println("Added key-value pair: " + key + " -> " + value);  // Debugging key-value addition
-            } else {
-                System.out.println("Line did not match any pattern");  // Debugging unmatched lines
-            }
+        switch (type) {
+            case '1': // Header record
+                json.addProperty("RecordType", "Header");
+                json.addProperty("Bank ID", line.substring(1, 10).trim());
+                json.addProperty("Batch Number", line.substring(10, 20).trim());
+                break;
+            case '5': // Detail record
+                json.addProperty("RecordType", "Detail");
+                json.addProperty("Transaction Amount", line.substring(1, 10).trim());
+                json.addProperty("Account Number", line.substring(10, 30).trim());
+                break;
+            case '9': // Control record
+                json.addProperty("RecordType", "Control");
+                json.addProperty("Total Amount", line.substring(1, 20).trim());
+                break;
+            default:
+                return null; // Return null if record type is not recognized
         }
-
-        return root; // Return the root object, which contains the entire parsed structure
+        return json;
     }
 }

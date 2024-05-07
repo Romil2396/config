@@ -9,7 +9,7 @@ public class ConfigFileProcessor2 {
 
     private static final Path INPUT_FILE_PATH = Paths.get("path/to/your/input/config.txt");
     private static final Path OUTPUT_FILE_PATH = Paths.get("path/to/your/output/result.txt");
-    private static final Pattern KEY_VALUE_PATTERN = Pattern.compile("^\\s*([\\w\\s]+)\\s*:\\s*(\"[^\"]*\"|[^\\s]+)\\s*$");
+    private static final Pattern KEY_VALUE_PATTERN = Pattern.compile("^\\s*(\\w+)\\s*:\\s*(.*?);\\s*$");
 
     public static void processConfigFile() throws IOException {
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -25,8 +25,8 @@ public class ConfigFileProcessor2 {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (line.trim().isEmpty() || line.trim().startsWith("//") || line.trim().startsWith("#")) {
-                    untouchedOutput.append(line).append("\n"); // Preserve comments and empty lines as is
-                    continue; // Skip processing for empty or commented lines
+                    untouchedOutput.append(line).append("\n");
+                    continue;
                 }
 
                 boolean handled = false;
@@ -45,15 +45,15 @@ public class ConfigFileProcessor2 {
                     Matcher matcher = KEY_VALUE_PATTERN.matcher(line);
                     if (matcher.matches()) {
                         JsonObject jsonObject = new JsonObject();
-                        jsonObject.addProperty(matcher.group(1).trim(), formatValue(matcher.group(2)));
+                        jsonObject.addProperty(matcher.group(1), matcher.group(2));
                         keyValueOutput.append(gson.toJson(jsonObject)).append("\n");
                         handled = true;
                     }
                 }
 
-                // If no processing was successful, attempt to parse as ACH
+                // Attempt to parse as ACH record
                 if (!handled) {
-                    JsonObject achRecord = tryParseACHRecord(line);
+                    JsonObject achRecord = ACHRecordParser.parseACHRecord(line);
                     if (achRecord != null) {
                         achOutput.append(gson.toJson(achRecord)).append("\n");
                         handled = true;
@@ -74,29 +74,11 @@ public class ConfigFileProcessor2 {
         }
     }
 
-    private static JsonObject tryParseACHRecord(String line) {
-        // This is a placeholder logic for ACH record parsing
-        // Implement actual ACH parsing logic here based on ACH format
-        if (line.startsWith("ACH") || Character.isDigit(line.charAt(0))) {
-            JsonObject json = new JsonObject();
-            json.addProperty("ACH Data", line);
-            return json;
-        }
-        return null;
-    }
-
     private static String correctMalformedJson(String json) {
         if (!json.trim().startsWith("{") && !json.trim().startsWith("[")) {
             json = "{" + json + "}";
         }
-        return json.replaceAll("([^\\\"]\\s*:\\s*)([^\\\"\\{\\[]+)(\\s*[,\\}])", "$1\"$2\"$3"); // Add quotes around bare words
-    }
-
-    private static String formatValue(String value) {
-        if (!value.startsWith("\"")) {
-            value = "\"" + value + "\"";
-        }
-        return value;
+        return json.replaceAll("([^\\\"]\\s*:\\s*)([^\\\"\\{\\[]+)(\\s*[,\\}])", "$1\"$2\"$3");
     }
 
     public static void main(String[] args) {
