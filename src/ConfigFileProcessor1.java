@@ -1,12 +1,4 @@
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.google.gson.JsonSyntaxException;
-
-import groovy.lang.GroovyShell;
-import org.codehaus.groovy.control.CompilerConfiguration;
+import com.google.gson.*;
 
 import java.io.*;
 import java.nio.file.*;
@@ -21,98 +13,75 @@ public class ConfigFileProcessor1 {
 
     public static void processFile() throws IOException {
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
-        StringBuilder output = new StringBuilder();
-        StringBuilder jsonOutput = new StringBuilder("// JSON //\n");
-        StringBuilder keyValueOutput = new StringBuilder("// KEY PAIR //\n");
-        StringBuilder untouchedOutput = new StringBuilder("// UNTOUCHED //\n");
+        StringBuilder jsonOutput = new StringBuilder();
+        StringBuilder otherOutput = new StringBuilder();
 
         try (BufferedReader reader = Files.newBufferedReader(INPUT_FILE_PATH);
              BufferedWriter writer = Files.newBufferedWriter(OUTPUT_FILE_PATH, StandardOpenOption.CREATE)) {
 
             String line;
             while ((line = reader.readLine()) != null) {
-                System.out.println("Processing line: " + line);  // Debug output
-
                 boolean handled = false;
 
-                // Handle NACHA lines
-                if (line.length() > 1 && Character.isDigit(line.charAt(0))) {
-                    System.out.println("Detected possible NACHA record");
-                    handled = handleNACHA(line, jsonOutput);
-                }
-
-                // Try to parse as JSON
-                if (!handled) {
-                    try {
-                        JsonElement jsonElement = JsonParser.parseString(line);
-                        if (jsonElement.isJsonObject() || jsonElement.isJsonArray()) {
-                            jsonOutput.append(gson.toJson(jsonElement)).append("\n");
-                            handled = true;
-                            System.out.println("Processed as JSON");
-                        }
-                    } catch (JsonSyntaxException e) {
-                        System.out.println("JSON parsing failed: " + e.getMessage());
-                    }
+                // Try to parse as JSON first
+                if (tryParseJson(line, jsonOutput, gson)) {
+                    handled = true;
                 }
 
                 // Check for key-value pairs
-                if (!handled) {
-                    Matcher matcher = KEY_VALUE_PATTERN.matcher(line);
-                    if (matcher.matches()) {
-                        JsonObject jsonObject = new JsonObject();
-                        jsonObject.addProperty(matcher.group(1).trim(), matcher.group(2).replace("\"", ""));
-                        keyValueOutput.append(gson.toJson(jsonObject)).append("\n");
-                        handled = true;
-                        System.out.println("Processed as Key-Value Pair");
-                    }
+                if (!handled && tryParseKeyValue(line, jsonOutput, gson)) {
+                    handled = true;
                 }
 
-                // If no processing was successful, keep the line as original
+                // If no processing was successful, check if it's a NACHA record
+                if (!handled && tryParseNACHA(line, otherOutput)) {
+                    handled = true;
+                }
+
+                // If still not handled, it's truly untouched
                 if (!handled) {
-                    untouchedOutput.append(line).append("\n");
-                    System.out.println("Keeping original line as is");
+                    otherOutput.append(line).append("\n");
                 }
             }
 
-            // Write outputs with separators
+            // Write JSON outputs first, then other outputs
+            writer.write("// JSON Output //\n");
             writer.write(jsonOutput.toString());
-            writer.write(keyValueOutput.toString());
-            writer.write(untouchedOutput.toString());
+            writer.write("// Other Output //\n");
+            writer.write(otherOutput.toString());
         }
     }
 
-    private static boolean handleNACHA(String line, StringBuilder jsonOutput) {
-        char recordType = line.charAt(0);
-        JsonObject json = new JsonObject();
-        boolean handled = false;
+    private static boolean tryParseJson(String line, StringBuilder output, Gson gson) {
+        try {
+            JsonElement jsonElement = JsonParser.parseString(line);
+            if (jsonElement.isJsonObject() || jsonElement.isJsonArray()) {
+                output.append(gson.toJson(jsonElement)).append("\n");
+                return true;
+            }
+        } catch (JsonSyntaxException ignored) {}
+        return false;
+    }
 
-        switch (recordType) {
-            case '1': // File Header
-                json.addProperty("Type", "File Header");
-                handled = true;
-                break;
-            case '5': // Batch Header
-                json.addProperty("Type", "Batch Header");
-                handled = true;
-                break;
-            case '6': // Entry Detail
-                json.addProperty("Type", "Entry Detail");
-                handled = true;
-                break;
-            case '8': // Batch Control
-                json.addProperty("Type", "Batch Control");
-                handled = true;
-                break;
-            case '9': // File Control
-                json.addProperty("Type", "File Control");
-                handled = true;
-                break;
+    private static boolean tryParseKeyValue(String line, StringBuilder output, Gson gson) {
+        Matcher matcher = KEY_VALUE_PATTERN.matcher(line);
+        if (matcher.matches()) {
+            JsonObject jsonObject = new JsonObject();
+            jsonObject.addProperty(matcher.group(1).trim(), matcher.group(2).replace("\"", ""));
+            output.append(gson.toJson(jsonObject)).append("\n");
+            return true;
         }
+        return false;
+    }
 
-        if (handled) {
-            jsonOutput.append(json.toString()).append("\n");
+    private static boolean tryParseNACHA(String line, StringBuilder output) {
+        // Here you can add logic specific to parsing NACHA records
+        // For now, we simulate a check for NACHA record types based on expected starting characters
+        if (line.length() > 1 && Character.isDigit(line.charAt(0))) {
+            output.append("NACHA Record: ").append(line).append("\n");
+            return true;
         }
-        return handled;
+        return false;
     }
 
     public static void main(String[] args) {
