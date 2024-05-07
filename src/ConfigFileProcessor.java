@@ -16,11 +16,13 @@ public class ConfigFileProcessor {
 
     private static final Path INPUT_FILE_PATH = Paths.get("path/to/your/input/config.txt");
     private static final Path OUTPUT_FILE_PATH = Paths.get("path/to/your/output/result.txt");
+    private static final Pattern KEY_VALUE_PATTERN = Pattern.compile("^\\s*([\\w\\s]+)\\s*:\\s*(\"[^\"]*\"|[^\\s]+)\\s*$");
 
     public static void processConfigFile() throws IOException {
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
-        GroovyShell groovyShell = new GroovyShell(new CompilerConfiguration());
-        Pattern keyValuePattern = Pattern.compile("^\\s*(\\w+)\\s*:\\s*(.*)$");
+        CompilerConfiguration config = new CompilerConfiguration();
+        config.setScriptBaseClass("groovy.transform.BaseScript");
+        GroovyShell groovyShell = new GroovyShell(config);
 
         try (BufferedReader reader = Files.newBufferedReader(INPUT_FILE_PATH);
              BufferedWriter writer = Files.newBufferedWriter(OUTPUT_FILE_PATH, StandardOpenOption.CREATE)) {
@@ -37,10 +39,10 @@ public class ConfigFileProcessor {
                     }
                 } catch (JsonSyntaxException ignored) {
                     // Not a JSON line, check for key-value pairs
-                    Matcher matcher = keyValuePattern.matcher(line);
+                    Matcher matcher = KEY_VALUE_PATTERN.matcher(line);
                     if (matcher.matches()) {
                         JsonObject jsonObject = new JsonObject();
-                        jsonObject.addProperty(matcher.group(1), matcher.group(2));
+                        jsonObject.addProperty(matcher.group(1).trim(), matcher.group(2).replace("\"", ""));
                         writer.write(gson.toJson(jsonObject));
                         writer.newLine();
                         continue;
@@ -53,7 +55,7 @@ public class ConfigFileProcessor {
                     writer.write("Groovy AST: " + result.getClass().getSimpleName() + " -> " + result);
                     writer.newLine();
                 } catch (Exception e) {
-                    writer.write("Error processing line as Groovy code: " + e.getMessage());
+                    writer.write("Error processing line as Groovy code: " + line + " | Error: " + e.getMessage());
                     writer.newLine();
                 }
             }
