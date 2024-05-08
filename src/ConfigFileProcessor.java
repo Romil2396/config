@@ -1,29 +1,25 @@
+import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.ast.CompilationUnit;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonParser;
-import com.google.gson.JsonSyntaxException;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 
 import java.io.*;
-import java.nio.file.*;
+import java.nio.file.Paths;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class ConfigFileProcessor {
 
-    private static final Path INPUT_FILE_PATH = Paths.get("path/to/your/input/config.txt");
-    private static final Path OUTPUT_FILE_PATH = Paths.get("path/to/your/output/result.txt");
-    private static final Pattern KEY_VALUE_PATTERN = Pattern.compile("^\\s*([\\w\\s]+)\\s*:\\s*(\"[^\"]*\"|[^\\s]+)\\s*$");
+    private static final Gson gson = new GsonBuilder().setPrettyPrinting().create();
+    private static final Pattern KEY_VALUE_PATTERN = Pattern.compile("^\\s*(\\w+)\\s*:\\s*(.*?);\\s*$");
 
-    public static void processConfigFile() throws IOException {
-        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+    public static void processConfigFile(String inputPath, String outputPath) throws IOException {
+        JsonArray data = new JsonArray();
 
-        StringBuilder jsonOutput = new StringBuilder("// JSON //\n");
-        StringBuilder keyValueOutput = new StringBuilder("// KEY PAIR //\n");
-        StringBuilder untouchedOutput = new StringBuilder("// UNTOUCHED //\n");
-
-        try (BufferedReader reader = Files.newBufferedReader(INPUT_FILE_PATH);
-             BufferedWriter writer = Files.newBufferedWriter(OUTPUT_FILE_PATH, StandardOpenOption.CREATE)) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(inputPath));
+             BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath))) {
 
             String line;
             while ((line = reader.readLine()) != null) {
@@ -31,69 +27,62 @@ public class ConfigFileProcessor {
                     continue; // Skip empty or commented lines
                 }
 
-                boolean handled = false;
+                JsonObject jsonItem = new JsonObject();
+                jsonItem.addProperty("text", line); // Use the line itself as the text
 
-                // Try to correct and parse as JSON
                 try {
-                    JsonElement jsonElement = JsonParser.parseString(correctMalformedJson(line));
-                    if (jsonElement.isJsonObject() || jsonElement.isJsonArray()) {
-                        if (jsonElement.getAsJsonObject().size() > 0) {
-                            jsonOutput.append(gson.toJson(jsonElement)).append("\n");
-                            handled = true;
-                        }
-                    }
-                } catch (JsonSyntaxException e) {
-                    // Not JSON or still malformed after correction attempt
-                }
-
-                // Check for key-value pairs
-                if (!handled) {
+                    JsonObject jsonElement = StaticJavaParser.parse(line).toJSON();
+                    jsonItem.add("state", createStateObject(true, true)); // Nodes are opened and selected by default
+                    jsonItem.addProperty("text", jsonElement.toString());
+                } catch (Exception e) {
                     Matcher matcher = KEY_VALUE_PATTERN.matcher(line);
                     if (matcher.matches()) {
-                        JsonObject jsonObject = new JsonObject();
-                        String key = matcher.group(1).trim();
-                        String value = formatValue(matcher.group(2).trim());
-                        if (!value.isEmpty()) {
-                            jsonObject.addProperty(key, value);
-                            keyValueOutput.append(gson.toJson(jsonObject)).append("\n");
-                            handled = true;
-                        }
+                        JsonObject keyValueJson = new JsonObject();
+                        keyValueJson.addProperty("text", matcher.group(1) + ": " + matcher.group(2));
+                        jsonItem.add("children", new JsonArray());
+                        jsonItem.getAsJsonArray("children").add(keyValueJson);
+                    } else {
+                        jsonItem.add("children", new JsonArray());
+                        jsonItem.getAsJsonArray("children").add(createTextNode("Non-transformable line"));
                     }
                 }
 
-                // If no processing was successful, keep the line as original in brackets
-                if (!handled) {
-                    untouchedOutput.append("{").append(line).append("}\n");
-                }
+                data.add(jsonItem);
             }
 
-            // Write outputs with separators
-            writer.write(jsonOutput.toString());
-            writer.write(keyValueOutput.toString());
-            writer.write(untouchedOutput.toString());
+            JsonObject root = new JsonObject();
+            root.addProperty("id", "using_json");
+            root.add("core", createCoreObject(data));
+
+            writer.write("$('#using_json').jstree(" + gson.toJson(root) + ");");
         }
     }
 
-    // Attempt to correct common JSON formatting issues
-    private static String correctMalformedJson(String json) {
-        if (!json.trim().startsWith("{") && !json.trim().startsWith("[")) {
-            json = "{" + json + "}";
-        }
-        return json.replaceAll("([^\\\"]\\s*:\\s*)([^\\\"\\{\\[]+)(\\s*[,\\}])", "$1\"$2\"$3"); // Attempt to add quotes around bare words
+    private static JsonObject createCoreObject(JsonArray data) {
+        JsonObject core = new JsonObject();
+        core.add("data", data);
+        return core;
     }
 
-    // Ensure values are properly formatted as JSON values
-    private static String formatValue(String value) {
-        if (!value.startsWith("\"")) {
-            value = "\"" + value + "\"";
-        }
-        return value;
+    private static JsonObject createStateObject(boolean opened, boolean selected) {
+        JsonObject state = new JsonObject();
+        state.addProperty("opened", opened);
+        state.addProperty("selected", selected);
+        return state;
+    }
+
+    private static JsonObject createTextNode(String text) {
+        JsonObject node = new JsonObject();
+        node.addProperty("text", text);
+        return node;
     }
 
     public static void main(String[] args) {
         try {
-            processConfigFile();
-            System.out.println("Processing completed. Output written to " + OUTPUT_FILE_PATH);
+            String inputPath = "path/to/your/input/config.txt";
+            String outputPath = "path/to/your/output/result.txt";
+            processConfigFile(inputPath, outputPath);
+            System.out.println("Processing completed. Output written to " + outputPath);
         } catch (IOException e) {
             System.err.println("Failed to process the config file: " + e.getMessage());
         }
