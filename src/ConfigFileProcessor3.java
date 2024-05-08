@@ -3,6 +3,7 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -18,48 +19,63 @@ public class ConfigFileProcessor3 {
     private static final Pattern importPattern = Pattern.compile("^import\\s+(.*?);");
 
     public static void processConfigFile(String inputPath, String outputPath) throws IOException {
-        File inputFile = new File(inputPath);
-        BufferedReader reader = new BufferedReader(new FileReader(inputFile));
-        BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath));
+        JsonArray data = new JsonArray();
+        data.add("Simple root node");
 
-        JsonArray importsArray = new JsonArray();
-        JsonObject outputJson = new JsonObject();
+        try (BufferedReader reader = new BufferedReader(new FileReader(inputPath));
+             BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath))) {
 
-        String line;
-        while ((line = reader.readLine()) != null) {
-            Matcher importMatcher = importPattern.matcher(line);
-            if (importMatcher.matches()) {
-                JsonObject importObject = new JsonObject();
-                importObject.addProperty("value", importMatcher.group(1));
-                importsArray.add(importObject);
-                continue;
-            }
-
-            try {
-                JsonObject jsonElement = JsonParser.parseString(line).getAsJsonObject();
-                writer.write(gson.toJson(jsonElement) + "\n");
-            } catch (Exception e) {
-                JsonObject achRecord = achParser.parseRecord(line);
-                if (achRecord != null) {
-                    writer.write(gson.toJson(achRecord) + "\n");
-                } else if (line.contains("class") || line.contains("public static")) {
-                    try {
-                        CompilationUnit cu = StaticJavaParser.parse(line);
-                        writer.write(gson.toJson(cu.toString()) + "\n");
-                    } catch (Exception ex) {
-                        writer.write("// Unhandled Line // " + line + "\n");
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (importPattern.matcher(line).matches()) {
+                    Matcher m = importPattern.matcher(line);
+                    if (m.find()) {
+                        JsonObject importObj = new JsonObject();
+                        importObj.addProperty("text", m.group(1));
+                        data.add(importObj);
                     }
+                    continue;
+                }
+
+                JsonElement parsedElement;
+                try {
+                    parsedElement = JsonParser.parseString(line);
+                } catch (Exception e) {
+                    parsedElement = null;
+                }
+
+                if (parsedElement != null && parsedElement.isJsonObject()) {
+                    data.add(parsedElement.getAsJsonObject());
                 } else {
-                    writer.write("// Unhandled Line // " + line + "\n");
+                    Matcher kvMatcher = Pattern.compile("^\\s*(\\w+)\\s*:\\s*(.*?);\\s*$").matcher(line);
+                    if (kvMatcher.matches()) {
+                        JsonObject kvObject = new JsonObject();
+                        kvObject.addProperty(kvMatcher.group(1), kvMatcher.group(2));
+                        data.add(kvObject);
+                    } else if (line.contains("class") || line.contains("public static")) {
+                        try {
+                            CompilationUnit cu = StaticJavaParser.parse(line);
+                            JsonObject astJson = new JsonObject();
+                            astJson.addProperty("text", cu.toString());
+                            data.add(astJson);
+                        } catch (Exception ex) {
+                            JsonObject achRecord = achParser.parseRecord(line);
+                            if (achRecord != null) {
+                                data.add(achRecord);
+                            } else {
+                                JsonObject unhandled = new JsonObject();
+                                unhandled.addProperty("text", "Unhandled line: " + line);
+                                data.add(unhandled);
+                            }
+                        }
+                    }
                 }
             }
+
+            JsonObject root = new JsonObject();
+            root.add("data", data);
+            writer.write(gson.toJson(root));
         }
-
-        outputJson.add("imports", importsArray);
-        writer.write("Imports JSON: " + gson.toJson(outputJson) + "\n");
-
-        reader.close();
-        writer.close();
     }
 
     public static void main(String[] args) {
