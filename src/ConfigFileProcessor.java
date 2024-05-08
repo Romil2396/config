@@ -1,7 +1,6 @@
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
 
@@ -18,9 +17,10 @@ public class ConfigFileProcessor {
 
     public static void processConfigFile() throws IOException {
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
-        StringBuilder jsonOutput = new StringBuilder();
-        StringBuilder keyValueOutput = new StringBuilder();
-        StringBuilder untouchedOutput = new StringBuilder();
+
+        StringBuilder jsonOutput = new StringBuilder("// JSON //\n");
+        StringBuilder keyValueOutput = new StringBuilder("// KEY PAIR //\n");
+        StringBuilder untouchedOutput = new StringBuilder("// UNTOUCHED //\n");
 
         try (BufferedReader reader = Files.newBufferedReader(INPUT_FILE_PATH);
              BufferedWriter writer = Files.newBufferedWriter(OUTPUT_FILE_PATH, StandardOpenOption.CREATE)) {
@@ -33,27 +33,27 @@ public class ConfigFileProcessor {
 
                 boolean handled = false;
 
-                // Try to parse as JSON
+                // Try to correct and parse as JSON
                 try {
-                    JsonElement jsonElement = JsonParser.parseString(line);
+                    JsonElement jsonElement = JsonParser.parseString(correctMalformedJson(line));
                     if (jsonElement.isJsonObject() || jsonElement.isJsonArray()) {
-                        if (!jsonElement.toString().equals("{}")) { // Ensure not writing empty objects
+                        if (jsonElement.getAsJsonObject().size() > 0) {
                             jsonOutput.append(gson.toJson(jsonElement)).append("\n");
                             handled = true;
                         }
                     }
                 } catch (JsonSyntaxException e) {
-                    // Not JSON or malformed, continue to try other formats
+                    // Not JSON or still malformed after correction attempt
                 }
 
                 // Check for key-value pairs
                 if (!handled) {
                     Matcher matcher = KEY_VALUE_PATTERN.matcher(line);
                     if (matcher.matches()) {
+                        JsonObject jsonObject = new JsonObject();
                         String key = matcher.group(1).trim();
                         String value = formatValue(matcher.group(2).trim());
                         if (!value.isEmpty()) {
-                            JsonObject jsonObject = new JsonObject();
                             jsonObject.addProperty(key, value);
                             keyValueOutput.append(gson.toJson(jsonObject)).append("\n");
                             handled = true;
@@ -61,23 +61,31 @@ public class ConfigFileProcessor {
                     }
                 }
 
-                // If no processing was successful, keep the line as original
+                // If no processing was successful, keep the line as original in brackets
                 if (!handled) {
-                    untouchedOutput.append("{").append(line).append("}").append("\n");
+                    untouchedOutput.append("{").append(line).append("}\n");
                 }
             }
 
-            // Write outputs
-            if (jsonOutput.length() > 0) writer.write("// JSON\n" + jsonOutput.toString());
-            if (keyValueOutput.length() > 0) writer.write("// Key-Value Pairs\n" + keyValueOutput.toString());
-            if (untouchedOutput.length() > 0) writer.write("// Untouched\n" + untouchedOutput.toString());
+            // Write outputs with separators
+            writer.write(jsonOutput.toString());
+            writer.write(keyValueOutput.toString());
+            writer.write(untouchedOutput.toString());
         }
+    }
+
+    // Attempt to correct common JSON formatting issues
+    private static String correctMalformedJson(String json) {
+        if (!json.trim().startsWith("{") && !json.trim().startsWith("[")) {
+            json = "{" + json + "}";
+        }
+        return json.replaceAll("([^\\\"]\\s*:\\s*)([^\\\"\\{\\[]+)(\\s*[,\\}])", "$1\"$2\"$3"); // Attempt to add quotes around bare words
     }
 
     // Ensure values are properly formatted as JSON values
     private static String formatValue(String value) {
-        if (!value.startsWith("\"") && !value.matches("-?\\d+(\\.\\d+)?")) { // check if not a number
-            value = "\"" + value + "\""; // quote the value if not a numeric
+        if (!value.startsWith("\"")) {
+            value = "\"" + value + "\"";
         }
         return value;
     }
