@@ -17,27 +17,24 @@ public class ConfigFileProcessor3 {
     private static final Gson gson = new GsonBuilder().setPrettyPrinting().create();
     private static final DynamicACHParser achParser = new DynamicACHParser();
     private static final Pattern importPattern = Pattern.compile("^import\\s+(.*?);");
+    private static final Pattern keyValuePattern = Pattern.compile("^\\s*(\\w+)\\s*:\\s*(.*?);\\s*$");
 
     public static void processConfigFile(String inputPath, String outputPath) throws IOException {
-        JsonArray data = new JsonArray();
-        data.add("Simple root node");
+        JsonArray dataSections = new JsonArray();
+        JsonArray untouchedLines = new JsonArray();
 
         try (BufferedReader reader = new BufferedReader(new FileReader(inputPath));
              BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath))) {
 
             String line;
             while ((line = reader.readLine()) != null) {
+                JsonObject section = new JsonObject();
+                JsonElement parsedElement;
+
                 if (importPattern.matcher(line).matches()) {
-                    Matcher m = importPattern.matcher(line);
-                    if (m.find()) {
-                        JsonObject importObj = new JsonObject();
-                        importObj.addProperty("text", m.group(1));
-                        data.add(importObj);
-                    }
-                    continue;
+                    continue; // Skip import lines as they should be handled separately
                 }
 
-                JsonElement parsedElement;
                 try {
                     parsedElement = JsonParser.parseString(line);
                 } catch (Exception e) {
@@ -45,36 +42,40 @@ public class ConfigFileProcessor3 {
                 }
 
                 if (parsedElement != null && parsedElement.isJsonObject()) {
-                    data.add(parsedElement.getAsJsonObject());
+                    section.addProperty("JSON Tree", gson.toJson(parsedElement));
+                    dataSections.add(section);
                 } else {
-                    Matcher kvMatcher = Pattern.compile("^\\s*(\\w+)\\s*:\\s*(.*?);\\s*$").matcher(line);
+                    Matcher kvMatcher = keyValuePattern.matcher(line);
                     if (kvMatcher.matches()) {
                         JsonObject kvObject = new JsonObject();
                         kvObject.addProperty(kvMatcher.group(1), kvMatcher.group(2));
-                        data.add(kvObject);
+                        section.addProperty("Key-Value Pair", gson.toJson(kvObject));
+                        dataSections.add(section);
                     } else if (line.contains("class") || line.contains("public static")) {
                         try {
                             CompilationUnit cu = StaticJavaParser.parse(line);
-                            JsonObject astJson = new JsonObject();
-                            astJson.addProperty("text", cu.toString());
-                            data.add(astJson);
+                            section.addProperty("Java AST", cu.toString());
+                            dataSections.add(section);
                         } catch (Exception ex) {
                             JsonObject achRecord = achParser.parseRecord(line);
                             if (achRecord != null) {
-                                data.add(achRecord);
+                                section.addProperty("ACH/NACHA", gson.toJson(achRecord));
+                                dataSections.add(section);
                             } else {
-                                JsonObject unhandled = new JsonObject();
-                                unhandled.addProperty("text", "Unhandled line: " + line);
-                                data.add(unhandled);
+                                untouchedLines.add(line);
                             }
                         }
+                    } else {
+                        untouchedLines.add(line);
                     }
                 }
             }
 
-            JsonObject root = new JsonObject();
-            root.add("data", data);
-            writer.write(gson.toJson(root));
+            JsonObject outputJson = new JsonObject();
+            outputJson.add("Processed Sections", dataSections);
+            outputJson.add("Untouched Lines", untouchedLines);
+
+            writer.write(gson.toJson(outputJson));
         }
     }
 
