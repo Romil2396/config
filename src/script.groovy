@@ -14,12 +14,13 @@ List<String> imports = []
 List<String> comments = []
 StringBuilder jsonOrArrayBlock = new StringBuilder()
 List<Object> jsonOrArrayObjects = []
+List<String> unparsedData = []
 boolean inJsonOrArray = false
 
 lines.each { line ->
     line = line.trim()
     if (line.startsWith("//") || line.contains("/*")) {
-        // Handle single line and block comments
+        // Handle comments
         comments.add("{ ${line.replaceAll("//|/\\*|\\*/", "").trim()} }")
     } else if (line.matches("@\\w+.*")) {
         // Handle annotations
@@ -28,21 +29,26 @@ lines.each { line ->
         // Handle import statements
         imports.add(line)
     } else if (line.startsWith("[") || line.startsWith("{") || inJsonOrArray) {
-        // Detect JSON or array blocks
+        // Handle JSON or array blocks
         jsonOrArrayBlock.append(line)
         if (line.endsWith("]") || line.endsWith("}")) {
-            // End of JSON or array block
+            // Attempt to parse when block ends
             try {
                 def jsonParser = new JsonSlurper()
                 jsonOrArrayObjects.add(jsonParser.parseText(jsonOrArrayBlock.toString()))
+                jsonOrArrayBlock.setLength(0) // Clear the StringBuilder for the next block
+                inJsonOrArray = false
             } catch (Exception e) {
-                println("Error parsing JSON or Array: ${e.message}")
+                unparsedData.add(jsonOrArrayBlock.toString())
+                jsonOrArrayBlock.setLength(0)
+                inJsonOrArray = false
             }
-            jsonOrArrayBlock.setLength(0) // Clear the StringBuilder for the next block
-            inJsonOrArray = false
         } else {
             inJsonOrArray = true
         }
+    } else {
+        // Collect any other data that does not match known patterns
+        unparsedData.add(line)
     }
 }
 
@@ -51,7 +57,8 @@ def result = [
         imports: imports,
         annotations: annotations,
         jsonOrArrays: jsonOrArrayObjects,
-        comments: comments
+        comments: comments,
+        unparsed: unparsedData
 ]
 
 // Write the result to the output file
