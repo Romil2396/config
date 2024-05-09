@@ -26,7 +26,9 @@ def readAndParseJson(String path) {
         }
     }
 
-    if (!validJsonLines.isEmpty()) {
+    if (validJsonLines.isEmpty()) {
+        println("No valid JSON lines were found to parse.")
+    } else {
         // Attempt to parse the entire valid JSON lines as a JSON array
         String jsonArrayString = "[${validJsonLines.join(",")}]"
         try {
@@ -35,20 +37,21 @@ def readAndParseJson(String path) {
             println("Failed to parse combined JSON: ${e.message}")
             configData = [:] // Assign empty map if parsing fails
         }
-    } else {
-        println("No valid JSON lines were found to parse.")
-        configData = [:] // Assign empty map if no valid lines exist
     }
 
     // Save problematic lines to a separate file if any
-    if (!problematicLines.isEmpty()) {
+    if (problematicLines) {
         new File('path/to/your/problematic_lines.log').text = problematicLines.join('\n')
+        println("Problematic lines saved to 'problematic_lines.log'.")
     }
 }
 
 // Optionally, convert parsed JSON to a Groovy script and then to AST
 def jsonToGroovyAST(Map jsonData) {
-    if (!jsonData.isEmpty()) {
+    if (jsonData.isEmpty()) {
+        println("No JSON data available to convert to AST.")
+        return null // Return null if there is no data to process
+    } else {
         String groovyScript = jsonData.collect { key, value ->
             "def $key = '${value.toString().replace("'", "\\'")}'"
         }.join("\n")
@@ -59,9 +62,6 @@ def jsonToGroovyAST(Map jsonData) {
         cu.addSource(source)
         cu.compile(Phases.CONVERSION)
         return source.getAST()
-    } else {
-        println("No JSON data available to convert to AST.")
-        return null // Return null if there is no data to process
     }
 }
 
