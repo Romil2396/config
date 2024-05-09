@@ -3,8 +3,8 @@ package main1.java;
 import groovy.lang.GroovyClassLoader;
 import org.codehaus.groovy.control.CompilerConfiguration;
 import org.codehaus.groovy.control.CompilationUnit;
-import org.codehaus.groovy.ast.ClassNode;
 import org.codehaus.groovy.control.MultipleCompilationErrorsException;
+import org.codehaus.groovy.ast.ClassNode;
 import org.codehaus.groovy.tools.GroovyClass;
 
 import java.io.FileWriter;
@@ -43,8 +43,9 @@ public class GroovyASTConverter {
                     } catch (MultipleCompilationErrorsException e) {
                         writer.write("Unconverted Code:\n");
                         writer.write(snippet + "\n");
+                        writer.write("Error Message:\n" + e.getMessage() + "\n");
                         writer.write("---\n"); // Delimiter in output file
-                        System.err.println("Skipping problematic code snippet due to errors: " + e.getMessage());
+                        System.err.println("Compilation failed for snippet due to errors: " + e.getMessage());
                     }
                 }
             }
