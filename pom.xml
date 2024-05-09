@@ -20,6 +20,24 @@
                 <artifactId>gson</artifactId>
                 <version>2.8.6</version>
             </dependency>
+
+                    <!-- Groovy -->
+                    <dependency>
+                        <groupId>org.codehaus.groovy</groupId>
+                        <artifactId>groovy-all</artifactId>
+                        <version>3.0.9</version>
+                        <type>pom</type>
+                    </dependency>
+
+                    <!-- JSON processing library -->
+                    <dependency>
+                        <groupId>com.fasterxml.jackson.core</groupId>
+                        <artifactId>jackson-databind</artifactId>
+                        <version>2.13.0</version>
+                    </dependency>
+
+
         </dependencies>
+
 
 </project>
