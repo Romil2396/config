@@ -4,7 +4,7 @@ import org.codehaus.groovy.control.CompilerConfiguration
 import org.codehaus.groovy.control.SourceUnit
 import org.codehaus.groovy.control.MultipleCompilationErrorsException
 
-def parseFileToAST(String filePath) {
+def parseConfigToAST(String filePath) {
     CompilerConfiguration config = new CompilerConfiguration()
     SourceUnit sourceUnit = SourceUnit.create("script", new File(filePath), config)
     try {
@@ -18,45 +18,44 @@ def parseFileToAST(String filePath) {
     }
 }
 
-def parseASTToJson(ASTNode ast, File jsonFile) {
+def convertASTToJson(ASTNode ast, File jsonFile) {
     JsonBuilder jsonBuilder = new JsonBuilder()
     jsonBuilder(ast)
     jsonFile.text = jsonBuilder.toPrettyString()
 }
 
-def parseConfigFileToJson(File file, File jsonFile) {
+def createJsonFromConfigFile(File file, File jsonFile) {
     JsonBuilder jsonBuilder = new JsonBuilder()
-    List<String> errorLines = []
+    List<String> unparseableLines = []
     file.eachLine { line, lineNumber ->
         try {
             jsonBuilder(lineNumber: line)
         } catch (Exception e) {
-            errorLines << "Line $lineNumber: $line"
+            unparseableLines << "Line $lineNumber: $line"
         }
     }
     jsonFile.text = jsonBuilder.toPrettyString()
-    return errorLines
+    return unparseableLines
 }
 
-def main(String[] args) {
+def runConfiguration(String[] args) {
     String configFilePath = args[0]
 
-    // Generate AST file
-    def ast = parseFileToAST(configFilePath)
+    // Generate AST from .config file
+    def ast = parseConfigToAST(configFilePath)
     File astFile = new File(configFilePath.replace(".config", ".ast"))
-    parseASTToJson(ast, astFile)
+    convertASTToJson(ast, astFile)
 
-    // Parse .config to JSON
+    // Parse .config file to JSON
     File configFile = new File(configFilePath)
     File configJsonFile = new File(configFilePath.replace(".config", ".json"))
-    List<String> errorLines = parseConfigFileToJson(configFile, configJsonFile)
+    List<String> errorLines = createJsonFromConfigFile(configFile, configJsonFile)
 
-    // Error handling
+    // Handle error lines
     if (!errorLines.isEmpty()) {
         File errorFile = new File(configFilePath.replace(".config", "_errors.txt"))
         errorFile.text = errorLines.join("\n")
     }
 }
 
-main(args)
-
+runConfiguration(args)
