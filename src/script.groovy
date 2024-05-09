@@ -1,4 +1,5 @@
 import groovy.json.JsonSlurper
+import groovy.json.JsonException
 import org.codehaus.groovy.control.CompilerConfiguration
 import org.codehaus.groovy.control.SourceUnit
 import org.codehaus.groovy.control.CompilationUnit
@@ -6,26 +7,31 @@ import groovy.transform.Field
 
 @Field Map configData = [:]
 
-// Read the .config file, attempt to parse each line, skip unparsable lines, and log them
+// Read the .config file, skip lines starting with '/', and parse JSON, handling errors
 def readAndParseJson(String path) {
     def jsonSlurper = new JsonSlurper()
     def file = new File(path)
+    def validJsonLines = []
     def problematicLines = []
-    def stringBuilder = new StringBuilder()
 
     file.eachLine { line ->
         if (!line.startsWith('/')) {
             try {
-                // Try parsing each line to see if it's valid JSON part
-                jsonSlurper.parseText("[${line}]")  // Wrapping line in array brackets to ensure JSON format
-                stringBuilder.append(line).append('\n')
-            } catch (Exception e) {
+                // Validate line by attempting to parse it
+                jsonSlurper.parseText(line)
+                validJsonLines << line  // Add to valid lines if no exception is thrown
+            } catch (JsonException e) {
                 problematicLines << line  // Add to problematic lines if there is a parsing error
             }
         }
     }
 
-    configData = jsonSlurper.parseText("{${stringBuilder.toString()}}")  // Assuming the content forms a JSON object
+    if (validJsonLines) {
+        // Attempt to parse the entire valid JSON lines as a JSON array
+        String jsonArrayString = "[${validJsonLines.join(",")}]"
+        configData = jsonSlurper.parseText(jsonArrayString)
+    }
+
     new File('path/to/your/problematic_lines.log').text = problematicLines.join('\n')  // Saving problematic lines to a separate file
 }
 
