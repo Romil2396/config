@@ -1,26 +1,34 @@
 import groovy.json.JsonBuilder
-import org.codehaus.groovy.ast.ASTNode
 import org.codehaus.groovy.control.CompilerConfiguration
-import org.codehaus.groovy.control.SourceUnit
+import org.codehaus.groovy.control.CompilationUnit
 import org.codehaus.groovy.control.MultipleCompilationErrorsException
+import org.codehaus.groovy.ast.ASTNode
+import java.io.File
 
 def parseConfigToAST(String filePath) {
     CompilerConfiguration config = new CompilerConfiguration()
-    SourceUnit sourceUnit = SourceUnit.create("script", new File(filePath), config)
+    config.setSourceEncoding("UTF-8")  // Ensure the encoding is set if needed
+    CompilationUnit compUnit = new CompilationUnit(config)
+
+    File sourceFile = new File(filePath)
+    if (!sourceFile.exists()) {
+        println("File does not exist: $filePath")
+        return null
+    }
+
     try {
-        sourceUnit.parse()
-        sourceUnit.completePhase()
-        sourceUnit.convert()
-        return sourceUnit.AST
+        compUnit.addSource(sourceFile)
+        compUnit.compile(Phase.CONVERSION)  // Compile to the conversion phase to get the AST
+        return compUnit.AST
     } catch (MultipleCompilationErrorsException e) {
-        println("Error parsing file: $filePath")
+        println("Error compiling file: $filePath")
         return null
     }
 }
 
 def convertASTToJson(ASTNode ast, File jsonFile) {
     JsonBuilder jsonBuilder = new JsonBuilder()
-    jsonBuilder(ast)
+    jsonBuilder.call(ast)
     jsonFile.text = jsonBuilder.toPrettyString()
 }
 
