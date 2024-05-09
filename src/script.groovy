@@ -1,36 +1,33 @@
 import groovy.json.JsonSlurper
+import groovy.json.JsonBuilder
 import groovy.json.JsonException
 
-// Function to read and parse the JSON content from a .config file
-def readAndParseJson(String path) {
+// Function to read and parse the entire JSON content from a .config file
+def parseAndSaveJson(String inputFile, String outputFile) {
     def jsonSlurper = new JsonSlurper()
-    def file = new File(path)
-    def validJsonLines = []
-    def problematicLines = []
+    def file = new File(inputFile)
+    def jsonContent = []
+    def parsedJson = null
 
-    file.eachLine { line ->
-        println("Reading line: $line")  // Debug: print each line
-        if (!line.startsWith('/') && line.trim()) {
-            try {
-                // Attempt to parse each line to see if it's valid JSON
-                def parsedLine = jsonSlurper.parseText(line)
-                validJsonLines << parsedLine
-            } catch (JsonException e) {
-                problematicLines << line
-                println("Problem parsing line: $line")
-            }
+    try {
+        // Read the entire file content
+        jsonContent = file.text.trim()
+        // Parse the whole JSON content
+        parsedJson = jsonSlurper.parseText(jsonContent)
+        // Save parsed JSON to output file
+        new File(outputFile).withWriter('UTF-8') { writer ->
+            def jsonBuilder = new JsonBuilder(parsedJson)
+            writer.write(jsonBuilder.toPrettyString())  // Write formatted JSON
         }
-    }
-
-    // Log valid and problematic lines
-    println("Valid JSON Lines: $validJsonLines.size()")
-    println("Problematic Lines: $problematicLines.size()")
-
-    if (!problematicLines.isEmpty()) {
-        new File('path/to/your/problematic_lines.log').text = problematicLines.join('\n')
+        println("JSON has been successfully parsed and saved to: $outputFile")
+    } catch (JsonException e) {
+        println("Failed to parse JSON: ${e.message}")
+        // Optionally save problematic JSON to a log file
+        new File('path/to/your/problematic_json.log').text = jsonContent
     }
 }
 
 // Example usage
-String filePath = "path/to/your/file.config"
-readAndParseJson(filePath)
+String inputFilePath = "path/to/your/file.config"
+String outputFilePath = "path/to/your/output.json"
+parseAndSaveJson(inputFilePath, outputFilePath)
