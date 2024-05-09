@@ -1,7 +1,6 @@
 import groovy.json.JsonBuilder
 import org.codehaus.groovy.control.CompilerConfiguration
 import org.codehaus.groovy.control.CompilationUnit
-import org.codehaus.groovy.control.Phase
 import org.codehaus.groovy.control.MultipleCompilationErrorsException
 import java.io.File
 
@@ -18,24 +17,23 @@ def parseConfigToAST(String filePath) {
 
     try {
         compUnit.addSource(sourceFile)
-        compUnit.compile(Phase.CONVERSION)  // Compile to the conversion phase to get the AST
-
-        // Assuming we need the first ClassNode from sources for simplicity
-        def classNodes = compUnit.ast.classes
-        return classNodes.size() > 0 ? classNodes[0] : null
+        compUnit.compile()  // Compile the unit
+        // Retrieve the class nodes only if compilation succeeded
+        def classNodes = compUnit.classes
+        return classNodes.isEmpty() ? null : classNodes
     } catch (MultipleCompilationErrorsException e) {
         println("Error compiling file: $filePath")
         return null
     }
 }
 
-def convertASTToJson(def classNode, File jsonFile) {
-    if (classNode == null) {
-        println("No class node available to convert to JSON.")
+def convertASTToJson(List classNodes, File jsonFile) {
+    if (classNodes == null || classNodes.isEmpty()) {
+        println("No class nodes available to convert to JSON.")
         return
     }
     JsonBuilder jsonBuilder = new JsonBuilder()
-    jsonBuilder(classNode)
+    jsonBuilder.call(classNodes)
     jsonFile.text = jsonBuilder.toPrettyString()
 }
 
@@ -57,9 +55,9 @@ def runConfiguration(String[] args) {
     String configFilePath = args[0]
 
     // Generate AST from .config file
-    def classNode = parseConfigToAST(configFilePath)
+    List classNodes = parseConfigToAST(configFilePath)
     File astFile = new File(configFilePath.replace(".config", ".ast"))
-    convertASTToJson(classNode, astFile)
+    convertASTToJson(classNodes, astFile)
 
     // Parse .config file to JSON
     File configFile = new File(configFilePath)
