@@ -1,13 +1,13 @@
 import groovy.json.JsonBuilder
 import org.codehaus.groovy.control.CompilerConfiguration
 import org.codehaus.groovy.control.CompilationUnit
+import org.codehaus.groovy.control.Phase
 import org.codehaus.groovy.control.MultipleCompilationErrorsException
-import org.codehaus.groovy.ast.ASTNode
 import java.io.File
 
 def parseConfigToAST(String filePath) {
     CompilerConfiguration config = new CompilerConfiguration()
-    config.setSourceEncoding("UTF-8")  // Ensure the encoding is set if needed
+    config.setSourceEncoding("UTF-8")
     CompilationUnit compUnit = new CompilationUnit(config)
 
     File sourceFile = new File(filePath)
@@ -19,16 +19,23 @@ def parseConfigToAST(String filePath) {
     try {
         compUnit.addSource(sourceFile)
         compUnit.compile(Phase.CONVERSION)  // Compile to the conversion phase to get the AST
-        return compUnit.AST
+
+        // Assuming we need the first ClassNode from sources for simplicity
+        def classNodes = compUnit.ast.classes
+        return classNodes.size() > 0 ? classNodes[0] : null
     } catch (MultipleCompilationErrorsException e) {
         println("Error compiling file: $filePath")
         return null
     }
 }
 
-def convertASTToJson(ASTNode ast, File jsonFile) {
+def convertASTToJson(def classNode, File jsonFile) {
+    if (classNode == null) {
+        println("No class node available to convert to JSON.")
+        return
+    }
     JsonBuilder jsonBuilder = new JsonBuilder()
-    jsonBuilder.call(ast)
+    jsonBuilder(classNode)
     jsonFile.text = jsonBuilder.toPrettyString()
 }
 
@@ -50,9 +57,9 @@ def runConfiguration(String[] args) {
     String configFilePath = args[0]
 
     // Generate AST from .config file
-    def ast = parseConfigToAST(configFilePath)
+    def classNode = parseConfigToAST(configFilePath)
     File astFile = new File(configFilePath.replace(".config", ".ast"))
-    convertASTToJson(ast, astFile)
+    convertASTToJson(classNode, astFile)
 
     // Parse .config file to JSON
     File configFile = new File(configFilePath)
