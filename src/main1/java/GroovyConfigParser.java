@@ -12,7 +12,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class GroovyConfigParser {
 
@@ -23,22 +22,22 @@ public class GroovyConfigParser {
         ObjectNode jsonRoot = mapper.createObjectNode();
 
         try {
-            List<String> lines = Files.readAllLines(Paths.get(filePath));
+            String scriptContent = new String(Files.readAllBytes(Paths.get(filePath)));
             GroovyShell shell = new GroovyShell(new CompilerConfiguration());
             ObjectNode parseableAST = mapper.createObjectNode();
-            ObjectNode unparsableLines = mapper.createObjectNode();
+            ObjectNode unparsableSections = mapper.createObjectNode();
 
-            for (String line : lines) {
-                try {
-                    Script script = shell.parse(line);
-                    parseableAST.put(line, script.getClass().getName());
-                } catch (MultipleCompilationErrorsException e) {
-                    unparsableLines.put("unparsable", line);
-                }
+            try {
+                // Attempt to parse the entire file as a single script
+                Script script = shell.parse(scriptContent);
+                parseableAST.put("wholeScript", script.getClass().getName());
+            } catch (MultipleCompilationErrorsException e) {
+                // Handle parsing errors by possibly trying to parse smaller sections or reporting error sections
+                unparsableSections.put("unparsableSection", e.getMessage());
             }
 
             jsonRoot.set("parseableAST", parseableAST);
-            jsonRoot.set("unparsableLines", unparsableLines);
+            jsonRoot.set("unparsableSections", unparsableSections);
 
             mapper.writeValue(new File(outputJsonPath), jsonRoot);
         } catch (IOException e) {
