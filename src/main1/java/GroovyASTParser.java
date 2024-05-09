@@ -1,14 +1,17 @@
 package main1.java;
 
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import groovy.lang.GroovyShell;
 import groovy.lang.Script;
 import org.codehaus.groovy.ast.ModuleNode;
 import org.codehaus.groovy.control.CompilerConfiguration;
 import org.codehaus.groovy.control.SourceUnit;
-import com.fasterxml.jackson.annotation.JsonIdentityInfo;
-import com.fasterxml.jackson.annotation.ObjectIdGenerators;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
@@ -25,12 +28,14 @@ public class GroovyASTParser {
             // Parse Groovy script to AST
             ModuleNode moduleNode = parseGroovyScriptToAST(scriptContent);
 
-            // Wrap the ModuleNode with ASTNodeWrapper
-            ASTNodeWrapper wrapper = new ASTNodeWrapper(moduleNode);
+            // Configure ObjectMapper and register custom serializer
+            ObjectMapper mapper = new ObjectMapper();
+            SimpleModule module = new SimpleModule();
+            module.addSerializer(ModuleNode.class, new ModuleNodeSerializer());
+            mapper.registerModule(module);
 
             // Serialize AST to JSON
-            ObjectMapper mapper = new ObjectMapper();
-            String json = mapper.writeValueAsString(wrapper);
+            String json = mapper.writeValueAsString(moduleNode);
 
             // Save JSON to file
             Files.write(Paths.get(jsonFilePath), json.getBytes());
@@ -54,16 +59,13 @@ public class GroovyASTParser {
         return sourceUnit.getAST();
     }
 
-    @JsonIdentityInfo(generator = ObjectIdGenerators.IntSequenceGenerator.class, property = "@id")
-    public static class ASTNodeWrapper {
-        private ModuleNode moduleNode;
-
-        public ASTNodeWrapper(ModuleNode moduleNode) {
-            this.moduleNode = moduleNode;
-        }
-
-        public ModuleNode getModuleNode() {
-            return moduleNode;
+    static class ModuleNodeSerializer extends JsonSerializer<ModuleNode> {
+        @Override
+        public void serialize(ModuleNode value, JsonGenerator gen, SerializerProvider serializers) throws IOException, IOException {
+            gen.writeStartObject();
+            gen.writeStringField("name", value.getPackageName());
+            // Add more fields as necessary, handling each carefully to avoid recursion
+            gen.writeEndObject();
         }
     }
 }
