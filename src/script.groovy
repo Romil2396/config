@@ -12,10 +12,10 @@ List<String> lines = new File(inputFile).readLines()
 List<String> annotations = []
 List<String> imports = []
 List<String> comments = []
-StringBuilder jsonOrArrayBlock = new StringBuilder()
-List<Object> jsonOrArrayObjects = []
+Map<String, Object> customConfig = [:]
 List<String> unparsedData = []
-boolean inJsonOrArray = false
+String currentBlockName = null
+Map<String, String> currentBlockContent = [:]
 
 lines.each { line ->
     line = line.trim()
@@ -28,23 +28,24 @@ lines.each { line ->
     } else if (line.matches("import .*")) {
         // Handle import statements
         imports.add(line)
-    } else if (line.startsWith("[") || line.startsWith("{") || inJsonOrArray) {
-        // Handle JSON or array blocks
-        jsonOrArrayBlock.append(line)
-        if (line.endsWith("]") || line.endsWith("}")) {
-            // Attempt to parse when block ends
-            try {
-                def jsonParser = new JsonSlurper()
-                jsonOrArrayObjects.add(jsonParser.parseText(jsonOrArrayBlock.toString()))
-                jsonOrArrayBlock.setLength(0) // Clear the StringBuilder for the next block
-                inJsonOrArray = false
-            } catch (Exception e) {
-                unparsedData.add(jsonOrArrayBlock.toString())
-                jsonOrArrayBlock.setLength(0)
-                inJsonOrArray = false
+    } else if (line.matches("\\w+ \\{")) {
+        // Start of a custom block
+        currentBlockName = line.replaceAll("[\\{\\s]", "")
+    } else if (line == "}") {
+        // End of a custom block
+        if (currentBlockName != null) {
+            customConfig[currentBlockName] = currentBlockContent
+            currentBlockContent = [:]
+            currentBlockName = null
+        }
+    } else if (currentBlockName != null) {
+        // Within a custom block, parse content
+        line.split("\n").each { contentLine ->
+            def (key, value) = contentLine.split("=").collect { it.trim() }
+            if (value.startsWith("'") && value.endsWith("'")) {
+                value = value[1..-2]
             }
-        } else {
-            inJsonOrArray = true
+            currentBlockContent[key] = value
         }
     } else {
         // Collect any other data that does not match known patterns
@@ -56,7 +57,7 @@ lines.each { line ->
 def result = [
         imports: imports,
         annotations: annotations,
-        jsonOrArrays: jsonOrArrayObjects,
+        customConfigurations: customConfig,
         comments: comments,
         unparsed: unparsedData
 ]
