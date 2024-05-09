@@ -31,21 +31,25 @@ lines.each { line ->
     } else if (line.matches("\\w+ \\{")) {
         // Start of a custom block
         currentBlockName = line.replaceAll("[\\{\\s]", "")
+        currentBlockContent = [:]  // Initialize a new map for this block
     } else if (line == "}") {
         // End of a custom block
-        if (currentBlockName != null) {
+        if (currentBlockName != null && currentBlockContent != null) {
             customConfig[currentBlockName] = currentBlockContent
-            currentBlockContent = [:]
             currentBlockName = null
         }
     } else if (currentBlockName != null) {
         // Within a custom block, parse content
-        line.split("\n").each { contentLine ->
-            def (key, value) = contentLine.split("=").collect { it.trim() }
-            if (value.startsWith("'") && value.endsWith("'")) {
-                value = value[1..-2]
+        if (line.contains("=")) {
+            def parts = line.split("=")
+            if (parts.length > 1) {  // Ensure there are two parts to prevent null access
+                def key = parts[0].trim()
+                def value = parts[1].trim()
+                if (value.startsWith("'") && value.endsWith("'")) {
+                    value = value[1..-2]
+                }
+                currentBlockContent[key] = value
             }
-            currentBlockContent[key] = value
         }
     } else {
         // Collect any other data that does not match known patterns
