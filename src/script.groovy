@@ -15,7 +15,7 @@ def readAndParseJson(String path) {
     def problematicLines = []
 
     file.eachLine { line ->
-        if (!line.startsWith('/')) {
+        if (!line.startsWith('/') && line.trim()) { // Check that line is not a comment and not empty
             try {
                 // Validate line by attempting to parse it
                 jsonSlurper.parseText(line)
@@ -26,31 +26,51 @@ def readAndParseJson(String path) {
         }
     }
 
-    if (validJsonLines) {
+    if (!validJsonLines.isEmpty()) {
         // Attempt to parse the entire valid JSON lines as a JSON array
         String jsonArrayString = "[${validJsonLines.join(",")}]"
-        configData = jsonSlurper.parseText(jsonArrayString)
+        try {
+            configData = jsonSlurper.parseText(jsonArrayString)
+        } catch (JsonException e) {
+            println("Failed to parse combined JSON: ${e.message}")
+            configData = [:] // Assign empty map if parsing fails
+        }
+    } else {
+        println("No valid JSON lines were found to parse.")
+        configData = [:] // Assign empty map if no valid lines exist
     }
 
-    new File('path/to/your/problematic_lines.log').text = problematicLines.join('\n')  // Saving problematic lines to a separate file
+    // Save problematic lines to a separate file if any
+    if (!problematicLines.isEmpty()) {
+        new File('path/to/your/problematic_lines.log').text = problematicLines.join('\n')
+    }
 }
 
 // Optionally, convert parsed JSON to a Groovy script and then to AST
 def jsonToGroovyAST(Map jsonData) {
-    String groovyScript = jsonData.collect { key, value ->
-        "def $key = '${value.toString().replace("'", "\\'")}'"
-    }.join("\n")
+    if (!jsonData.isEmpty()) {
+        String groovyScript = jsonData.collect { key, value ->
+            "def $key = '${value.toString().replace("'", "\\'")}'"
+        }.join("\n")
 
-    CompilerConfiguration config = new CompilerConfiguration()
-    CompilationUnit cu = new CompilationUnit(config)
-    SourceUnit source = SourceUnit.create("jsonAsGroovy", groovyScript, config)
-    cu.addSource(source)
-    cu.compile(Phases.CONVERSION)
-    return source.getAST()
+        CompilerConfiguration config = new CompilerConfiguration()
+        CompilationUnit cu = new CompilationUnit(config)
+        SourceUnit source = SourceUnit.create("jsonAsGroovy", groovyScript, config)
+        cu.addSource(source)
+        cu.compile(Phases.CONVERSION)
+        return source.getAST()
+    } else {
+        println("No JSON data available to convert to AST.")
+        return null // Return null if there is no data to process
+    }
 }
 
 // Example usage
 String filePath = "path/to/your/file.config"
 readAndParseJson(filePath)
 def ast = jsonToGroovyAST(configData)
-println ast.dump()
+if (ast != null) {
+    println ast.dump()
+} else {
+    println "No AST generated due to lack of valid JSON data."
+}
