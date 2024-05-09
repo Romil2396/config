@@ -6,11 +6,12 @@ import groovy.transform.Field
 
 @Field Map configData
 
-// Read the .config file and parse JSON
+// Read the .config file, skip lines starting with '/', and parse JSON
 def readAndParseJson(String path) {
     def jsonSlurper = new JsonSlurper()
     def file = new File(path)
-    configData = jsonSlurper.parse(file)
+    def fileContent = file.readLines().findAll { !it.startsWith('/') }.join('\n')
+    configData = jsonSlurper.parseText(fileContent)
 }
 
 // Optionally, convert parsed JSON to a Groovy script and then to AST
