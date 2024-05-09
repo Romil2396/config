@@ -11,6 +11,7 @@ def readAndParseJson(String path) {
     def jsonSlurper = new JsonSlurper()
     def file = new File(path)
     def fileContent = file.readLines().findAll { !it.startsWith('/') }.join('\n')
+    println("Debugging JSON Content: \n$fileContent")  // Debug statement to print the JSON content
     configData = jsonSlurper.parseText(fileContent)
 }
 
