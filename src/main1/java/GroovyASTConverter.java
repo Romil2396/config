@@ -4,6 +4,7 @@ import groovy.lang.GroovyClassLoader;
 import org.codehaus.groovy.control.CompilerConfiguration;
 import org.codehaus.groovy.control.CompilationUnit;
 import org.codehaus.groovy.control.MultipleCompilationErrorsException;
+import org.codehaus.groovy.control.messages.SyntaxErrorMessage;
 import org.codehaus.groovy.ast.ClassNode;
 import org.codehaus.groovy.tools.GroovyClass;
 
@@ -43,7 +44,16 @@ public class GroovyASTConverter {
                     } catch (MultipleCompilationErrorsException e) {
                         writer.write("Unconverted Code:\n");
                         writer.write(snippet + "\n");
-                        writer.write("Error Message:\n" + e.getMessage() + "\n");
+                        writer.write("Error Messages:\n");
+                        e.getErrorCollector().getErrors().forEach(error -> {
+                            if (error instanceof SyntaxErrorMessage) {
+                                try {
+                                    writer.write(((SyntaxErrorMessage) error).getCause().getMessage() + "\n");
+                                } catch (IOException ex) {
+                                    throw new RuntimeException(ex);
+                                }
+                            }
+                        });
                         writer.write("---\n"); // Delimiter in output file
                         System.err.println("Compilation failed for snippet due to errors: " + e.getMessage());
                     }
