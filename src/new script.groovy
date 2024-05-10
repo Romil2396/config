@@ -1,4 +1,3 @@
-
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 
@@ -20,11 +19,26 @@ String currentBlockName = null
 Map<String, String> currentBlockContent = [:]
 
 def parseComplexStructure(String line) {
-    // Basic parsing logic to convert config line into a Groovy map or list
-    // This is a simplistic parser and might need to be enhanced for full syntax support
-    line = line.replaceAll(/config\.add\(/, '[')
-    line = line.replaceAll(/\)/, ']')
-    return new JsonSlurper().parseText(line)
+    // Remove initial function call syntax
+    line = line.replaceAll(/^config\.add\(/, '')
+    line = line.replaceAll(/\)$/, '')  // Remove the trailing parenthesis
+
+    // Transform into JSON-like syntax
+    line = line.replaceAll(/(\w+):/,'"${1}":') // Ensure keys are quoted
+    line = line.replaceAll(/: ?'([^']*)'/,': "${1}"') // Ensure values are quoted
+
+    // Wrap non-structured data in brackets to form a valid JSON structure
+    if (!line.startsWith("[") && !line.startsWith("{")) {
+        line = "[${line}]"
+    }
+
+    // Parse the transformed line as JSON
+    try {
+        return new JsonSlurper().parseText(line)
+    } catch (Exception e) {
+        println("Error parsing: $e")
+        return null // Handle parsing failure
+    }
 }
 
 lines.each { line ->
