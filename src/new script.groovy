@@ -16,6 +16,8 @@ Map<String, Object> customConfig = [:]
 List<Object> additionalConfigs = []
 List<Object> getStatements = []
 List<String> code = []
+String currentBlockName = null
+Map<String, String> currentBlockContent = [:]
 
 def parseComplexStructure(String line) {
     line = line.trim().replaceAll(/^config\.add\(/, '').replaceAll(/\)$/, '')
@@ -49,8 +51,8 @@ lines.each { line ->
     } else if (line.matches("import .*")) {
         imports.add(line)
     } else if (line.matches("\\w+ \\{")) {
-        currentBlockName = line.replaceAll("[\\{\\s]", "")
-        currentBlockContent = [:]
+        currentBlockName = line.replaceAll("\\{", "").trim()
+        currentBlockContent = [:]  // Initialize a new map for this block
     } else if (line == "}") {
         if (currentBlockName != null && currentBlockContent != null) {
             customConfig[currentBlockName] = currentBlockContent
