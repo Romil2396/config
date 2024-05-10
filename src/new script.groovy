@@ -23,9 +23,9 @@ def parseComplexStructure(String line) {
     line = line.replaceAll(/^config\.add\(/, '')
     line = line.replaceAll(/\)$/, '')  // Remove the trailing parenthesis
 
-    // Transform into JSON-like syntax
-    line = line.replaceAll(/(\w+):/,'"${1}":') // Ensure keys are quoted
-    line = line.replaceAll(/: ?'([^']*)'/,': "${1}"') // Ensure values are quoted
+    // Transform into JSON-like syntax ensuring keys don't start with digits
+    line = line.replaceAll(/([a-zA-Z_]\w*):/, '"$1":') // Ensure keys are quoted correctly
+    line = line.replaceAll(/: ?'([^']*)'/, ': "$1"') // Ensure values are quoted
 
     // Wrap non-structured data in brackets to form a valid JSON structure
     if (!line.startsWith("[") && !line.startsWith("{")) {
@@ -55,7 +55,7 @@ lines.each { line ->
     } else if (line.matches("\\w+ \\{")) {
         // Start of a custom block
         currentBlockName = line.replaceAll("[\\{\\s]", "")
-        currentBlockContent = [:]
+        currentBlockContent = [:]  // Initialize a new map for this block
     } else if (line == "}") {
         // End of a custom block
         if (currentBlockName != null && currentBlockContent != null) {
@@ -77,7 +77,10 @@ lines.each { line ->
         }
     } else if (line.startsWith("config.add")) {
         // Handle additional complex configuration lines
-        additionalConfigs.add(parseComplexStructure(line))
+        Object parsed = parseComplexStructure(line)
+        if (parsed != null) {
+            additionalConfigs.add(parsed)
+        }
     } else {
         // Collect any other data that does not match known patterns
         unparsedData.add(line)
