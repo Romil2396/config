@@ -17,6 +17,51 @@ List<String> code = []
 String currentBlockName = null
 Map<String, String> currentBlockContent = [:]
 
+def parseComplexStructure(String line) {
+    if (line == null || line.trim().isEmpty()) {
+        println("Warning: Skipping null or empty line for parsing.")
+        return null
+    }
+
+    // Replace function call wrappers and adjust for JSON structure
+    line = line.trim().replaceAll(/^config\.add\(/, '').replaceAll(/\)$/, '')
+    line = line.replaceAll(/(\w+)\s*=\s*/, '"$1":')
+
+    int openBrackets = 0
+    StringBuilder jsonBuilder = new StringBuilder()
+    jsonBuilder.append('[') // Start JSON array
+
+    line.each { char ->
+        if (char == '[') {
+            openBrackets++
+            jsonBuilder.append('{')
+        } else if (char == ']') {
+            if (openBrackets > 0) {
+                openBrackets--
+                jsonBuilder.append('}')
+                if (openBrackets > 0) {
+                    jsonBuilder.append(',')
+                }
+            }
+        } else if (char == ',') {
+            if (openBrackets > 0) {
+                jsonBuilder.append(',')
+            }
+        } else {
+            jsonBuilder.append(char)
+        }
+    }
+
+    jsonBuilder.append(']') // End JSON array
+
+    try {
+        return new JsonSlurper().parseText(jsonBuilder.toString())
+    } catch (Exception e) {
+        println("Error parsing complex structure: ${e.message}")
+        return null
+    }
+}
+
 lines.each { line ->
     line = line.trim()
     if (line.startsWith("//") || line.contains("/*")) {
@@ -36,7 +81,9 @@ lines.each { line ->
     } else if (currentBlockName != null && line.contains("=")) {
         def parts = line.split("=")
         if (parts.length > 1) {
-            currentBlockContent[parts[0].trim()] = parts[1].trim().replaceAll(/^'(.*)'$/, '"$1"')
+            String key = parts[0].trim()
+            String value = parts[1].trim().replaceAll(/^'(.*)'$/, '"$1"')
+            currentBlockContent[key] = value
         }
     } else if (line.startsWith("config.add")) {
         Object parsed = parseComplexStructure(line)
