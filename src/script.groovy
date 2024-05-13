@@ -15,6 +15,7 @@ List<String> comments = []
 List<String> code = []
 Map<String, Object> configAdd = [:]
 Map<String, Object> configGet = [:]
+Map<String, String> keyValuePairs = [:]
 
 // Helper function to process lines for config.add or config.get
 void processConfigLine(Map configMap, String line) {
@@ -45,6 +46,11 @@ lines.each { line ->
         processConfigLine(configAdd, line)
     } else if (line.startsWith("config.get(")) {
         processConfigLine(configGet, line)
+    } else if (line.matches("\\w+\\s*=\\s*'.*'")) {
+        // Process simple key-value pairs
+        String key = line.split("=")[0].trim()
+        String value = line.split("=")[1].trim().replaceAll(/^'(.*)'$/, '$1')
+        keyValuePairs.put(key, value)
     } else {
         code.add(line)
     }
@@ -56,6 +62,7 @@ def result = [
         annotations: annotations,
         configAdd: configAdd,
         configGet: configGet,
+        keyValuePairs: keyValuePairs,
         comments: comments,
         code: code
 ]
