@@ -1,5 +1,3 @@
-
-
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 
@@ -19,44 +17,6 @@ List<String> code = []
 String currentBlockName = null
 Map<String, String> currentBlockContent = [:]
 
-def parseComplexStructure(String line) {
-    line = line.trim().replaceAll(/^config\.add\(/, '').replaceAll(/\)$/, '')
-    line = line.replaceAll(/(\w+)\s*=\s*/g, '"$1":')
-    int openBrackets = 0
-    StringBuilder jsonBuilder = new StringBuilder()
-    jsonBuilder.append('[')
-
-    line.each { char ->
-        switch (char) {
-            case '[':
-                openBrackets++
-                jsonBuilder.append('{')
-                break
-            case ']':
-                openBrackets--
-                jsonBuilder.append('}')
-                if (openBrackets > 0) {
-                    jsonBuilder.append(',')
-                }
-                break
-            case ',':
-                if (openBrackets > 0) {
-                    jsonBuilder.append(',')
-                }
-                break
-            default:
-                jsonBuilder.append(char)
-        }
-    }
-    jsonBuilder.append(']')
-    try {
-        return new JsonSlurper().parseText(jsonBuilder.toString())
-    } catch (Exception e) {
-        println("Error parsing complex structure: $e")
-        return null
-    }
-}
-
 lines.each { line ->
     line = line.trim()
     if (line.startsWith("//") || line.contains("/*")) {
@@ -67,7 +27,7 @@ lines.each { line ->
         imports.add(line)
     } else if (line.matches("\\w+ \\{")) {
         currentBlockName = line.replaceAll("\\{", "").trim()
-        currentBlockContent = [:]  // Initialize a new map for this block
+        currentBlockContent = [:]
     } else if (line == "}") {
         if (currentBlockName != null && currentBlockContent != null) {
             customConfig[currentBlockName] = currentBlockContent
@@ -79,7 +39,10 @@ lines.each { line ->
             currentBlockContent[parts[0].trim()] = parts[1].trim().replaceAll(/^'(.*)'$/, '"$1"')
         }
     } else if (line.startsWith("config.add")) {
-        additionalConfigs.add(parseComplexStructure(line))
+        Object parsed = parseComplexStructure(line)
+        if (parsed != null) {
+            additionalConfigs.add(parsed)
+        }
     } else {
         code.add(line)
     }
@@ -95,4 +58,4 @@ def result = [
 
 new File(outputFile).write(JsonOutput.prettyPrint(JsonOutput.toJson(result)))
 
-println "Processing complete. Output written to: ${outputFile}"
+println("Processing complete. Output written to: ${outputFile}")
