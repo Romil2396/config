@@ -13,36 +13,36 @@ List<String> annotations = []
 List<String> imports = []
 List<String> comments = []
 Map<String, Object> customConfig = [:]
-List<String> unparsedData = []
+List<String> code = []
+Map<String, Object> configAdd = [:]
+Map<String, Object> configGet = [:]
 String currentBlockName = null
 Map<String, String> currentBlockContent = [:]
 
 lines.each { line ->
     line = line.trim()
     if (line.startsWith("//") || line.contains("/*")) {
-        // Handle comments
         comments.add("{ ${line.replaceAll("//|/\\*|\\*/", "").trim()} }")
     } else if (line.matches("@\\w+.*")) {
-        // Handle annotations
         annotations.add(line)
     } else if (line.matches("import .*")) {
-        // Handle import statements
         imports.add(line)
+    } else if (line.startsWith("config.add(")) {
+        processConfigLine(configAdd, line)
+    } else if (line.startsWith("config.get(")) {
+        processConfigLine(configGet, line)
     } else if (line.matches("\\w+ \\{")) {
-        // Start of a custom block
-        currentBlockName = line.replaceAll("[\\{\\s]", "")
-        currentBlockContent = [:]  // Initialize a new map for this block
+        currentBlockName = line.replaceAll("\\{", "").trim()
+        currentBlockContent = [:]
     } else if (line == "}") {
-        // End of a custom block
         if (currentBlockName != null && currentBlockContent != null) {
             customConfig[currentBlockName] = currentBlockContent
             currentBlockName = null
         }
     } else if (currentBlockName != null) {
-        // Within a custom block, parse content
         if (line.contains("=")) {
             def parts = line.split("=")
-            if (parts.length > 1) {  // Ensure there are two parts to prevent null access
+            if (parts.length > 1) {
                 def key = parts[0].trim()
                 def value = parts[1].trim()
                 if (value.startsWith("'") && value.endsWith("'")) {
@@ -52,21 +52,26 @@ lines.each { line ->
             }
         }
     } else {
-        // Collect any other data that does not match known patterns
-        unparsedData.add(line)
+        code.add(line)
     }
 }
 
-// Combine everything into a single JSON tree
 def result = [
         imports: imports,
         annotations: annotations,
         customConfigurations: customConfig,
         comments: comments,
-        unparsed: unparsedData
+        configAdd: configAdd,
+        configGet: configGet,
+        code: code  // Renamed from unparsedData
 ]
 
-// Write the result to the output file
 new File(outputFile).write(JsonOutput.prettyPrint(JsonOutput.toJson(result)))
-
 println "Processing complete. Output written to: ${outputFile}"
+
+void processConfigLine(Map configMap, String line) {
+    String trimmedLine = line.replaceAll(/^config\.(add|get)\(/, '').replaceAll(/\)$/, '')
+    def jsonSlurper = new JsonSlurper()
+    def content = jsonSlurper.parseText("{${trimmedLine.replaceAll(/(\w+)\s*=/, '"$1":')}}")
+    configMap[line] = content
+}
