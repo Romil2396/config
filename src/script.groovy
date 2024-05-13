@@ -1,19 +1,38 @@
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 
+// Define the path to the input and output files
 String inputFile = "input.config"
 String outputFile = "output.json"
 
+// Read the entire file as a list of strings
 List<String> lines = new File(inputFile).readLines()
 
+// Initialize structures to hold different parts
 List<String> annotations = []
 List<String> imports = []
 List<String> comments = []
-Map<String, Object> customConfig = [:]
 List<String> code = []
 Map<String, Object> configAdd = [:]
 Map<String, Object> configGet = [:]
 
+// Helper function to process lines for config.add or config.get
+void processConfigLine(Map configMap, String line) {
+    String trimmedLine = line.replaceAll(/^config\.(add|get)\(/, '').replaceAll(/\)$/, '')
+    trimmedLine = trimmedLine.replaceAll(/\(/, '{').replaceAll(/\)/, '}').replaceAll(/(\w+)\s*=/, '"$1":')
+    trimmedLine = "{${trimmedLine}}" // Ensure it's a proper JSON object
+
+    try {
+        def jsonSlurper = new JsonSlurper()
+        def content = jsonSlurper.parseText(trimmedLine)
+        configMap.put(line, content)  // Store parsed content under the original line
+    } catch (Exception e) {
+        println("Error parsing JSON from content: ${trimmedLine}, Error: ${e.message}")
+        configMap.put(line, "Error parsing: ${e.message}")
+    }
+}
+
+// Process each line from the file
 lines.each { line ->
     line = line.trim()
     if (line.startsWith("//") || line.contains("/*")) {
@@ -31,15 +50,16 @@ lines.each { line ->
     }
 }
 
-Map result = [
+// Construct the final JSON structure to output
+def result = [
         imports: imports,
         annotations: annotations,
-        customConfigurations: customConfig,
-        comments: comments,
         configAdd: configAdd,
         configGet: configGet,
+        comments: comments,
         code: code
 ]
 
+// Write the JSON result to the output file
 new File(outputFile).write(JsonOutput.prettyPrint(JsonOutput.toJson(result)))
 println("Processing complete. Output written to: ${outputFile}")
