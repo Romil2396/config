@@ -1,5 +1,5 @@
+import groovy.json.JsonBuilder
 import groovy.json.JsonSlurper
-import groovy.json.JsonOutput
 
 // Define the path to the input and output files
 String inputFile = "input.config"
@@ -9,100 +9,60 @@ String outputFile = "output.json"
 List<String> lines = new File(inputFile).readLines()
 
 // Initialize structures to hold different parts
-List<String> annotations = []
+List<Map<String, String>> annotations = []
 List<String> imports = []
-Map<String, Object> customConfig = [:]
-List<Object> additionalConfigs = []
+List<Map<String, String>> configurations = []
 List<String> code = []
-String currentBlockName = null
-Map<String, String> currentBlockContent = [:]
-
-def parseComplexStructure(String line) {
-    if (line == null || line.trim().isEmpty()) {
-        println("Warning: Skipping null or empty line for parsing.")
-        return null
-    }
-
-    // Replace function call wrappers and adjust for JSON structure
-    line = line.trim().replaceAll(/^config\.add\(/, '').replaceAll(/\)$/, '')
-    line = line.replaceAll(/(\w+)\s*=\s*/, '"$1":')
-
-    int openBrackets = 0
-    StringBuilder jsonBuilder = new StringBuilder()
-    jsonBuilder.append('[') // Start JSON array
-
-    line.each { char ->
-        if (char == '[') {
-            openBrackets++
-            jsonBuilder.append('{')
-        } else if (char == ']') {
-            if (openBrackets > 0) {
-                openBrackets--
-                jsonBuilder.append('}')
-                if (openBrackets > 0) {
-                    jsonBuilder.append(',')
-                }
-            }
-        } else if (char == ',') {
-            if (openBrackets > 0) {
-                jsonBuilder.append(',')
-            }
-        } else {
-            jsonBuilder.append(char)
-        }
-    }
-
-    jsonBuilder.append(']') // End JSON array
-
-    try {
-        return new JsonSlurper().parseText(jsonBuilder.toString())
-    } catch (Exception e) {
-        println("Error parsing complex structure: ${e.message}")
-        return null
-    }
-}
 
 lines.each { line ->
     line = line.trim()
     if (line.startsWith("//") || line.contains("/*")) {
         // Skip comments
     } else if (line.matches("@\\w+.*")) {
-        annotations.add(line)
+        // Annotations - assume format is "@Annotation(value)"
+        Map<String, String> annotation = [:]
+        String key = line.find(/\w+/)
+        String value = line.find(/\((.*?)\)/)[1] ?: ""
+        annotation[key] = value
+        annotations.add(annotation)
     } else if (line.matches("import .*")) {
+        // Import statements
         imports.add(line)
-    } else if (line.matches("\\w+ \\{")) {
-        currentBlockName = line.replaceAll("\\{", "").trim()
-        currentBlockContent = [:]
-    } else if (line == "}") {
-        if (currentBlockName != null && currentBlockContent != null) {
-            customConfig[currentBlockName] = currentBlockContent
-            currentBlockName = null
-        }
-    } else if (currentBlockName != null && line.contains("=")) {
-        def parts = line.split("=")
-        if (parts.length > 1) {
-            String key = parts[0].trim()
-            String value = parts[1].trim().replaceAll(/^'(.*)'$/, '"$1"')
-            currentBlockContent[key] = value
-        }
-    } else if (line.startsWith("config.add")) {
-        Object parsed = parseComplexStructure(line)
-        if (parsed != null) {
-            additionalConfigs.add(parsed)
-        }
+    } else if (line.contains("config.add") && line.endsWith("]")) {
+        // Configuration additions - parsing simpler nested structures
+        String content = line.replaceAll(/config\.add\(|\)$/g, "")
+        Map parsedContent = parseAsJson(content)
+        configurations.add(parsedContent)
     } else {
+        // Other code lines
         code.add(line)
     }
 }
 
-def result = [
+Map result = [
         imports: imports,
         annotations: annotations,
-        customConfigurations: customConfig,
-        additionalConfigurations: additionalConfigs,
+        configurations: configurations,
         code: code
 ]
 
-new File(outputFile).write(JsonOutput.prettyPrint(JsonOutput.toJson(result)))
+// Write the result to the output file
+new File(outputFile).newWriter().with { writer ->
+    writer << new JsonBuilder(result).toPrettyString()
+    writer.close()
+}
 
 println("Processing complete. Output written to: ${outputFile}")
+
+Map parseAsJson(String content) {
+    // Simplified JSON parsing for structured line content
+    try {
+        def jsonSlurper = new JsonSlurper()
+        content = content.replaceAll(/(\w+)=/g, '"$1":') // Prepare string as JSON
+        content = "{${content}}" // Encapsulate in braces for JSON object
+        return jsonSlurper.parseText(content)
+    } catch (Exception e) {
+        println("Error parsing JSON from content: ${content}, Error: ${e.message}")
+        return [:] // Return empty map on error
+    }
+}
