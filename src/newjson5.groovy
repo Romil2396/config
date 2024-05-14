@@ -13,21 +13,19 @@ Map<String, Object> customConfig = [:]
 Map<String, Object> configAdd = [:]
 Map<String, Object> configGet = [:]
 List<String> code = []
-StringBuilder buffer = new StringBuilder()
-String currentBlockName = null
-boolean isCapturing = false
+String currentBlockName = null // Correctly scoped at the script level
 
-def parseConfiguration(String configContent, Map configMap) {
-    configContent = configContent.replaceAll(/^config\.(add|get)\(/, '{').replaceAll(/\)$/, '}');
-    configContent = configContent.replaceAll(/(\w+)\s*=\s*/, '"$1":');
-    configContent = configContent.replaceAll(/'/, '"');
+def parseConfiguration(String line, Map configMap) {
+    String configContent = line.replaceAll(/^config\.(add|get)\(/, '{').replaceAll(/\)$/, '}')
+    configContent = configContent.replaceAll(/(\w+)\s*=\s*/, '"$1":')  // Convert to JSON key-value pairs
+    configContent = configContent.replaceAll(/'/, '"')  // Replace single quotes with double quotes for JSON
 
     try {
-        def parsedContent = new JsonSlurper().parseText(configContent);
-        configMap.put(configContent, parsedContent);
+        def parsedContent = new JsonSlurper().parseText(configContent)
+        configMap[line] = parsedContent
     } catch (Exception e) {
-        println("Error parsing configuration: ${configContent}, Error: ${e.message}");
-        configMap.put(configContent, "Error: ${e.message}");
+        println("Error parsing configuration: ${line}, Error: ${e.message}")
+        configMap[line] = "Error: ${e.message}"
     }
 }
 
@@ -39,32 +37,20 @@ lines.each { line ->
         annotations.add(line)
     } else if (line.matches("import .*")) {
         imports.add(line)
-    } else if (line.startsWith("config.add(") || line.startsWith("config.get(")) {
-        if (!isCapturing) {
-            isCapturing = true;
-            buffer.setLength(0);
-            buffer.append(line);
-            if (line.endsWith(")")) {
-                parseConfiguration(buffer.toString(), line.startsWith("config.add(") ? configAdd : configGet);
-                isCapturing = false;
-            }
-        } else {
-            buffer.append(" ").append(line);
-            if (line.endsWith(")")) {
-                parseConfiguration(buffer.toString(), buffer.toString().startsWith("config.add(") ? configAdd : configGet);
-                isCapturing = false;
-            }
-        }
+    } else if (line.startsWith("config.add(")) {
+        parseConfiguration(line, configAdd)
+    } else if (line.startsWith("config.get(")) {
+        parseConfiguration(line, configGet)
     } else if (line.matches("\\w+ \\{")) {
-        currentBlockName = line.replaceAll("\\{", "").trim();
-        customConfig[currentBlockName] = [:];
+        currentBlockName = line.replaceAll("\\{", "").trim()
+        customConfig[currentBlockName] = [:] // Initialize the map for block content
     } else if (currentBlockName != null && line == "}") {
-        currentBlockName = null; // End of custom block
+        currentBlockName = null // Properly close the current block
     } else if (currentBlockName != null && line.contains("=")) {
-        def parts = line.split("=") as List;
-        customConfig[currentBlockName][parts[0].trim()] = parts[1].trim().replaceAll(/^'(.*)'$/, '$1');
+        def parts = line.split("=")
+        customConfig[currentBlockName][parts[0].trim()] = parts[1].trim().replaceAll(/^'(.*)'$/, '$1')
     } else {
-        code.add(line);
+        code.add(line)
     }
 }
 
