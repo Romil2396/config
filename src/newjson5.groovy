@@ -1,4 +1,3 @@
-
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 
@@ -14,7 +13,8 @@ Map<String, Object> customConfig = [:]
 Map<String, Object> configAdd = [:]
 Map<String, Object> configGet = [:]
 List<String> code = []
-StringBuilder configBuffer = new StringBuilder()
+StringBuilder buffer = new StringBuilder()
+String currentBlockName = null
 boolean isCapturing = false
 
 def parseConfiguration(String configContent, Map configMap) {
@@ -24,44 +24,45 @@ def parseConfiguration(String configContent, Map configMap) {
 
     try {
         def parsedContent = new JsonSlurper().parseText(configContent);
-        configMap[configContent] = parsedContent;
+        configMap.put(configContent, parsedContent);
     } catch (Exception e) {
         println("Error parsing configuration: ${configContent}, Error: ${e.message}");
-        configMap[configContent] = "Error: ${e.message}";
+        configMap.put(configContent, "Error: ${e.message}");
     }
 }
 
 lines.each { line ->
     line = line.trim()
     if (line.startsWith("//") || line.contains("/*")) {
-        comments.add(line);
+        comments.add(line)
     } else if (line.matches("@\\w+.*")) {
-        annotations.add(line);
+        annotations.add(line)
     } else if (line.matches("import .*")) {
-        imports.add(line);
-    } else if ((line.startsWith("config.add(") || line.startsWith("config.get(")) && !isCapturing) {
-        isCapturing = true;
-        configBuffer.append(line);
-        if (line.endsWith(")")) {
-            parseConfiguration(configBuffer.toString(), line.startsWith("config.add(") ? configAdd : configGet);
-            configBuffer.setLength(0); // Clear the buffer
-            isCapturing = false;
-        }
-    } else if (isCapturing) {
-        configBuffer.append(" ").append(line);
-        if (line.endsWith(")") || line.endsWith("]")) {
-            parseConfiguration(configBuffer.toString(), configBuffer.toString().startsWith("config.add(") ? configAdd : configGet);
-            configBuffer.setLength(0); // Clear the buffer
-            isCapturing = false;
+        imports.add(line)
+    } else if (line.startsWith("config.add(") || line.startsWith("config.get(")) {
+        if (!isCapturing) {
+            isCapturing = true;
+            buffer.setLength(0);
+            buffer.append(line);
+            if (line.endsWith(")")) {
+                parseConfiguration(buffer.toString(), line.startsWith("config.add(") ? configAdd : configGet);
+                isCapturing = false;
+            }
+        } else {
+            buffer.append(" ").append(line);
+            if (line.endsWith(")")) {
+                parseConfiguration(buffer.toString(), buffer.toString().startsWith("config.add(") ? configAdd : configGet);
+                isCapturing = false;
+            }
         }
     } else if (line.matches("\\w+ \\{")) {
         currentBlockName = line.replaceAll("\\{", "").trim();
         customConfig[currentBlockName] = [:];
     } else if (currentBlockName != null && line == "}") {
-        currentBlockName = null;
+        currentBlockName = null; // End of custom block
     } else if (currentBlockName != null && line.contains("=")) {
-        def (key, value) = line.split("=") as List;
-        customConfig[currentBlockName][key.trim()] = value.trim().replaceAll(/^'(.*)'$/, '$1');
+        def parts = line.split("=") as List;
+        customConfig[currentBlockName][parts[0].trim()] = parts[1].trim().replaceAll(/^'(.*)'$/, '$1');
     } else {
         code.add(line);
     }
