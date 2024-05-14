@@ -14,44 +14,45 @@ Map<String, Object> configAdd = [:]
 Map<String, Object> configGet = [:]
 List<String> code = []
 String buffer = ""
-boolean capturing = false
+boolean bufferActive = false
 
-def parseComplexArrayStructure(String content) {
-    if (content.isEmpty()) return
-
-    // Normalize and prepare the content for JSON conversion
-    content = content.replaceAll(/\s*\n\s*/, " ")  // Remove newlines and extra spaces
-    content = content.replaceAll(/(\w+)\s*:\s*'([^']*)'/, '"$1":"$2"')  // Convert to JSON key-value pairs
-    content = "{${content}}"  // Enclose in braces to form a valid JSON object
+def parseConfiguration(String buffer, Map configMap) {
+    // Normalize and prepare the buffer for JSON conversion
+    String configContent = buffer.replaceAll(/^config\.(add|get)\(/, '{').replaceAll(/\)$/, '}');
+    configContent = configContent.replaceAll(/(\w+)\s*=\s*/, '"$1":'); // Convert key=value to "key":"value"
+    configContent = configContent.replaceAll(/'/, '"'); // Replace single quotes with double quotes for JSON
 
     try {
-        def jsonSlurper = new JsonSlurper()
-        def contentObject = jsonSlurper.parseText(content)
-        customConfig[content.takeWhile { it != ' ' }] = contentObject
+        def parsedContent = new JsonSlurper().parseText(configContent);
+        configMap[buffer] = parsedContent;
     } catch (Exception e) {
-        println("Error parsing complex array structure: Error: ${e.message}")
-        customConfig[content.takeWhile { it != ' ' }] = "Error: ${e.message}"
+        println("Error parsing configuration: ${buffer}, Error: ${e.message}");
+        configMap[buffer] = "Error: ${e.message}";
     }
 }
 
 lines.each { line ->
     line = line.trim()
-    if (capturing) {
-        if (line.endsWith("]")) {
-            buffer += " " + line[0..-2]  // Capture line excluding the closing bracket
-            parseComplexArrayStructure(buffer)
-            buffer = ""
-            capturing = false
+    if (line.startsWith("//") || line.contains("/*")) {
+        comments.add(line)
+    } else if (line.matches("@\\w+.*")) {
+        annotations.add(line)
+    } else if (line.matches("import .*")) {
+        imports.add(line)
+    } else if (line.startsWith("config.add(") || line.startsWith("config.get(")) {
+        if (!bufferActive && line.endsWith(")")) {
+            parseConfiguration(line, (line.startsWith("config.add(") ? configAdd : configGet))
         } else {
-            buffer += " " + line  // Continue capturing lines
+            bufferActive = true
+            buffer += line + " "
         }
-    } else if (line.startsWith("config.add(")) {
-        parseConfiguration(line, configAdd)
-    } else if (line.startsWith("config.get(")) {
-        parseConfiguration(line, configGet)
-    } else if (line.matches("\\w+ \\[.*")) {  // Start capturing multiline configuration
-        capturing = true
-        buffer = line.replaceAll("\\[", "")  // Start new buffer excluding the opening bracket
+    } else if (bufferActive) {
+        buffer += line + " "
+        if (line.endsWith(")")) {
+            parseConfiguration(buffer, (buffer.startsWith("config.add(") ? configAdd : configGet))
+            bufferActive = false
+            buffer = ""
+        }
     } else {
         code.add(line)
     }
@@ -63,6 +64,7 @@ def result = [
         customConfigurations: customConfig,
         configAdd: configAdd,
         configGet: configGet,
+        comments: comments,
         code: code
 ]
 
