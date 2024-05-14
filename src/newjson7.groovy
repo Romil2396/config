@@ -1,4 +1,3 @@
-
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 
@@ -15,19 +14,19 @@ Map<String, Object> configAdd = [:]
 Map<String, Object> configGet = [:]
 List<String> code = []
 StringBuilder complexConfigBuffer = new StringBuilder()
-boolean capturingComplexConfig = false
+boolean isCapturing = false
 
 def parseConfiguration(String content, Map configMap) {
-    // Normalizing and converting the content into JSON structure
     content = content.replaceAll(/'/, '"'); // Replace single quotes with double quotes
-    content = content.replaceAll(/\[(.+?)\]/) { match -> // Convert array notations to JSON objects
-        "{${match[1].replaceAll(/(\w+)\s*=\s*/,'"$1":')}}"
+    content = content.replaceAll(/\(/, '{').replaceAll(/\)/, '}'); // Replace brackets to form JSON-like structure
+    content = content.replaceAll(/\[(.+?)\]/) { match -> // Handle arrays
+        "{${match[1].replaceAll(/(\w+)\s*=\s*/, '"$1":')}}"
     }
-    content = content.replaceAll(/\(\s*/, '{').replaceAll(/\s*\)/, '}'); // Convert parenthesis to JSON objects
+    content = content.replaceAll(/(\w+)\s*=\s*/, '"$1":'); // Transform key=value pairs
 
     try {
         def jsonSlurper = new JsonSlurper()
-        def parsedContent = jsonSlurper.parseText(content)
+        def parsedContent = jsonSlurper.parseText("{${content}}") // Ensure JSON object encapsulation
         configMap[content] = parsedContent
     } catch (Exception e) {
         println("Error parsing configuration: ${content}, Error: ${e.message}")
@@ -44,21 +43,28 @@ lines.each { line ->
     } else if (line.matches("import .*")) {
         imports.add(line)
     } else if (line.startsWith("config.add(") || line.startsWith("config.get(")) {
-        if (line.endsWith(")")) {
-            parseConfiguration(line, line.startsWith("config.add(") ? configAdd : configGet)
-        } else {
-            capturingComplexConfig = true
+        if (!isCapturing) {
             complexConfigBuffer.append(line)
-        }
-    } else if (capturingComplexConfig) {
-        complexConfigBuffer.append(" ").append(line)
-        if (line.endsWith(")")) {
-            parseConfiguration(complexConfigBuffer.toString(), complexConfigBuffer.toString().startsWith("config.add(") ? configAdd : configGet)
-            complexConfigBuffer.setLength(0) // Clear the buffer
-            capturingComplexConfig = false
+            if (line.endsWith(")")) {
+                parseConfiguration(complexConfigBuffer.toString(), line.startsWith("config.add(") ? configAdd : configGet)
+                complexConfigBuffer.setLength(0) // Clear the buffer
+            } else {
+                isCapturing = true // Start capturing
+            }
+        } else {
+            complexConfigBuffer.append(" ").append(line)
+            if (line.endsWith(")")) {
+                parseConfiguration(complexConfigBuffer.toString(), complexConfigBuffer.toString().startsWith("config.add(") ? configAdd : configGet)
+                complexConfigBuffer.setLength(0) // Clear the buffer
+                isCapturing = false
+            }
         }
     } else {
-        code.add(line)
+        if (!isCapturing) {
+            code.add(line)
+        } else {
+            complexConfigBuffer.append(" ").append(line)
+        }
     }
 }
 
