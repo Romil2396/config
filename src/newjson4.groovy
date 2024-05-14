@@ -13,21 +13,20 @@ Map<String, Object> customConfig = [:]
 Map<String, Object> configAdd = [:]
 Map<String, Object> configGet = [:]
 List<String> code = []
-String buffer = ""
-boolean bufferActive = false
+StringBuilder buffer = new StringBuilder()
+String currentBlockName = null
 
-def parseConfiguration(String buffer, Map configMap) {
-    // Normalize and prepare the buffer for JSON conversion
-    String configContent = buffer.replaceAll(/^config\.(add|get)\(/, '{').replaceAll(/\)$/, '}');
-    configContent = configContent.replaceAll(/(\w+)\s*=\s*/, '"$1":'); // Convert key=value to "key":"value"
-    configContent = configContent.replaceAll(/'/, '"'); // Replace single quotes with double quotes for JSON
+def parseConfiguration(String content, Map configMap) {
+    content = content.replaceAll(/'/, '"')  // Replace single quotes with double quotes
+    content = content.replaceAll(/\[(\w+)\s*:\s*/, '{"$1":').replaceAll(/,(\w+)\s*:\s*/, ',"$1":').replaceAll(/\]/, '}')  // Convert array-like to JSON-like
 
     try {
-        def parsedContent = new JsonSlurper().parseText(configContent);
-        configMap[buffer] = parsedContent;
+        def jsonSlurper = new JsonSlurper()
+        def parsedContent = jsonSlurper.parseText(content)
+        configMap.put(content, parsedContent)
     } catch (Exception e) {
-        println("Error parsing configuration: ${buffer}, Error: ${e.message}");
-        configMap[buffer] = "Error: ${e.message}";
+        println("Error parsing configuration: ${content}, Error: ${e.message}")
+        configMap.put(content, "Error: ${e.message}")
     }
 }
 
@@ -40,18 +39,16 @@ lines.each { line ->
     } else if (line.matches("import .*")) {
         imports.add(line)
     } else if (line.startsWith("config.add(") || line.startsWith("config.get(")) {
-        if (!bufferActive && line.endsWith(")")) {
-            parseConfiguration(line, (line.startsWith("config.add(") ? configAdd : configGet))
-        } else {
-            bufferActive = true
-            buffer += line + " "
-        }
-    } else if (bufferActive) {
-        buffer += line + " "
+        buffer.append(line)
         if (line.endsWith(")")) {
-            parseConfiguration(buffer, (buffer.startsWith("config.add(") ? configAdd : configGet))
-            bufferActive = false
-            buffer = ""
+            parseConfiguration(buffer.toString(), line.startsWith("config.add(") ? configAdd : configGet)
+            buffer.setLength(0)  // Clear the buffer
+        }
+    } else if (buffer.length() > 0 && buffer.toString().startsWith("config.")) {
+        buffer.append(" ").append(line)
+        if (line.endsWith(")")) {
+            parseConfiguration(buffer.toString(), buffer.toString().startsWith("config.add(") ? configAdd : configGet)
+            buffer.setLength(0)  // Clear the buffer
         }
     } else {
         code.add(line)
