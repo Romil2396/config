@@ -19,8 +19,7 @@ boolean capturing = false
 def parseConfiguration(String content, Map configMap) {
     content = content.replaceAll(/'/, '"'); // Single quotes to double quotes
     content = content.replaceAll(/\s*=\s*/, ':'); // '=' to ':'
-    content = content.replaceAll(/(\w+)\((.*?)\)/) { // Handle nested function calls
-        '"${it[1]}": {${it[2].replaceAll(/(\w+):/, '"$1":')}}'
+    content = content.replaceAll(/(\w+)\((.*?)\)/) { // Handle nested function calls'"${it[1]}":{${it[2].replaceAll(/(\w+):/,'"$1":')}}'
     }
     content = "{${content}}"; // Ensure proper JSON object wrapping
 
