@@ -137,7 +137,7 @@ public class CustomAndHoconToYaml {
         for (String line : content.split("\n")) {
             if (line.trim().isEmpty()) continue;
 
-            if (line.trim().startsWith("{") || line.trim().startsWith("xyz{")) {
+            if (line.trim().startsWith("xyz{") || line.trim().endsWith("}")) {
                 customBuilder.append(line).append("\n");
             } else {
                 isHocon = true;
@@ -146,10 +146,18 @@ public class CustomAndHoconToYaml {
         }
 
         if (customBuilder.length() > 0) {
-            customDataMap = parseCustomFormat(customBuilder.toString());
+            try {
+                customDataMap = parseCustomFormat(customBuilder.toString());
+            } catch (Exception e) {
+                System.err.println("Error parsing custom format: " + e.getMessage());
+            }
         }
         if (hoconBuilder.length() > 0) {
-            hoconDataMap = parseHocon(hoconBuilder.toString());
+            try {
+                hoconDataMap = parseHocon(hoconBuilder.toString());
+            } catch (Exception e) {
+                System.err.println("Error parsing HOCON format: " + e.getMessage());
+            }
         }
 
         // Merging customDataMap and hoconDataMap
