@@ -125,19 +125,30 @@ public class CustomAndHoconToYaml {
         }
 
         String content = input.toString();
-        int delimiterIndex = content.indexOf("## HOCON ##");
-        if (delimiterIndex == -1) {
-            System.out.println("Delimiter '## HOCON ##' not found in the input file.");
-            return;
+        Map<String, Object> customDataMap = new HashMap<>();
+        Map<String, Object> hoconDataMap = new HashMap<>();
+
+        boolean isHocon = false;
+        StringBuilder customBuilder = new StringBuilder();
+        StringBuilder hoconBuilder = new StringBuilder();
+
+        for (String line : content.split("\n")) {
+            if (line.trim().startsWith("{") || line.trim().endsWith("}")) {
+                customBuilder.append(line).append("\n");
+            } else {
+                isHocon = true;
+                hoconBuilder.append(line).append("\n");
+            }
         }
 
-        String customPart = content.substring(0, delimiterIndex).trim();
-        String hoconPart = content.substring(delimiterIndex + "## HOCON ##".length()).trim();
+        if (customBuilder.length() > 0) {
+            customDataMap = parseCustomFormat(customBuilder.toString());
+        }
+        if (hoconBuilder.length() > 0) {
+            hoconDataMap = parseHocon(hoconBuilder.toString());
+        }
 
-        Map<String, Object> customDataMap = parseCustomFormat(customPart);
-        Map<String, Object> hoconDataMap = parseHocon(hoconPart);
-
-        // Merging customDataMap and hoconDataMap (if needed)
+        // Merging customDataMap and hoconDataMap
         Map<String, Object> mergedMap = new HashMap<>(customDataMap);
         mergedMap.putAll(hoconDataMap);
 
