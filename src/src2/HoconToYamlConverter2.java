@@ -1,4 +1,5 @@
 package src2;
+
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 import org.yaml.snakeyaml.DumperOptions;
@@ -11,6 +12,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Stack;
 
 public class HoconToYamlConverter2 {
 
@@ -26,15 +28,16 @@ public class HoconToYamlConverter2 {
         Map<String, Object> configMap = config.root().unwrapped();
 
         // Parse custom format if any
-        String customFormat = "xyz{ abc{ name ='rtyu' deloveryPoints{ 'rtyu' (abc:primary.home) }}}";
+        String customFormat = "xyz{ abc{ name ='rtyu' deliveryPoints{ 'rtyu' (abc:primary.home) }}}";
         Map<String, Object> customMap = parseCustomFormat(customFormat);
 
         // Merge HOCON and custom format maps
-        configMap.putAll(customMap);
+        mergeMaps(configMap, customMap);
 
         // Set up SnakeYAML
         DumperOptions options = new DumperOptions();
         options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
+        options.setPrettyFlow(true);
         Representer representer = new Representer();
         representer.addClassTag(Map.class, Tag.MAP);
         Yaml yaml = new Yaml(representer, options);
@@ -49,35 +52,58 @@ public class HoconToYamlConverter2 {
         }
     }
 
-    // Simple parser for custom format
+    // Enhanced parser for custom format
     private static Map<String, Object> parseCustomFormat(String customFormat) {
         Map<String, Object> result = new HashMap<>();
-        String[] tokens = customFormat.split("\\s*\\{\\s*|\\s*\\}\\s*|\\s*'\\s*|\\s*=\\s*|\\s*\\(\\s*|\\s*\\)\\s*");
-        parseTokens(result, tokens, 0, tokens.length);
+        Stack<Map<String, Object>> stack = new Stack<>();
+        stack.push(result);
+
+        String[] tokens = customFormat.split("(?=[{}()='])|(?<=[{}()='])|\\s+");
+        String key = null;
+        for (String token : tokens) {
+            token = token.trim();
+            if (token.isEmpty()) continue;
+
+            switch (token) {
+                case "{":
+                    Map<String, Object> newMap = new HashMap<>();
+                    stack.peek().put(key, newMap);
+                    stack.push(newMap);
+                    key = null;
+                    break;
+                case "}":
+                    stack.pop();
+                    break;
+                case "=":
+                    break;
+                case "(":
+                    break;
+                case ")":
+                    break;
+                case "'":
+                    break;
+                default:
+                    if (key == null) {
+                        key = token;
+                    } else {
+                        stack.peek().put(key, token);
+                        key = null;
+                    }
+                    break;
+            }
+        }
+
         return result;
     }
 
-    private static int parseTokens(Map<String, Object> map, String[] tokens, int start, int end) {
-        String key = null;
-        for (int i = start; i < end; i++) {
-            if (tokens[i].isEmpty()) continue;
-            if (tokens[i].contains(":")) {
-                String[] pair = tokens[i].split(":");
-                map.put(pair[0], pair[1]);
-            } else if (tokens[i].equals("=")) {
-                key = tokens[i - 1];
-            } else if (tokens[i].equals("{")) {
-                Map<String, Object> nestedMap = new HashMap<>();
-                i = parseTokens(nestedMap, tokens, i + 1, end);
-                map.put(key, nestedMap);
-                key = null;
-            } else if (tokens[i].equals("}")) {
-                return i;
-            } else if (key != null) {
-                map.put(key, tokens[i]);
-                key = null;
+    // Helper method to merge two maps
+    private static void mergeMaps(Map<String, Object> mainMap, Map<String, Object> additionalMap) {
+        for (Map.Entry<String, Object> entry : additionalMap.entrySet()) {
+            if (mainMap.containsKey(entry.getKey()) && mainMap.get(entry.getKey()) instanceof Map && entry.getValue() instanceof Map) {
+                mergeMaps((Map<String, Object>) mainMap.get(entry.getKey()), (Map<String, Object>) entry.getValue());
+            } else {
+                mainMap.put(entry.getKey(), entry.getValue());
             }
         }
-        return end;
     }
 }
