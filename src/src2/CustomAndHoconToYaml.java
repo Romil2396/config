@@ -36,12 +36,14 @@ public class CustomAndHoconToYaml {
                     isKey = true;
                     break;
                 case '}':
+                    if (stack.size() > 1) {
+                        stack.pop();
+                    }
                     if (value.length() > 0 && key.length() > 0) {
                         stack.peek().put(key.toString(), value.toString());
                         key.setLength(0);
                         value.setLength(0);
                     }
-                    stack.pop();
                     isKey = true;
                     break;
                 case '=':
@@ -133,11 +135,13 @@ public class CustomAndHoconToYaml {
         StringBuilder hoconBuilder = new StringBuilder();
 
         for (String line : content.split("\n")) {
-            if (line.trim().startsWith("{") || line.trim().endsWith("}")) {
-                customBuilder.append(line).append("\n");
-            } else {
-                isHocon = true;
+            if (line.trim().isEmpty()) continue;
+
+            if (line.trim().startsWith("xyz{") || isHocon) {
                 hoconBuilder.append(line).append("\n");
+                isHocon = true;
+            } else {
+                customBuilder.append(line).append("\n");
             }
         }
 
